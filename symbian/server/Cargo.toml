@@ -17,3 +17,8 @@ test = false
 e32.workspace = true
 neoui-proto.workspace = true
 datetime-core.workspace = true
+calendar-core.workspace = true
+pim-ics.workspace = true
+# NEOCONT's book, for the birthdays (Apache-2.0, no Slint)
+# shortcut: path until phone#birthdays is pushed, then git rev
+contacts = { path = "../../../../.wt/phone-dt/crates/contacts" }

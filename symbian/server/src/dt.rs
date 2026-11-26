@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-//! DTSRV's state: the alarms and the timer, what rings, the shade cards, `dtsrv.next`, and dt-ipc's requests.
+//! DTSRV's state: the alarms and the timer, the calendar's events and to-dos, what rings, the shade cards,
+//! `dtsrv.next`, and dt-ipc's requests.
 
+use crate::cal::{self, Local};
 use crate::store;
 use crate::ui::{OPEN_WAKE, Ui};
 use alloc::format;
@@ -8,10 +10,12 @@ use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
+use calendar_core::wire;
+use calendar_core::{Birthday, DAY, EventDraft, Instance, ReminderId, Store, Todo};
 use core::cell::RefCell;
 use core::ops::ControlFlow;
-use datetime_core::alarm::Alarms;
-use datetime_core::ipc::{self, action, mask, op, ring};
+use datetime_core::alarm::{Alarms, format_hm};
+use datetime_core::ipc::{self, CalendarInfo, RingInfo, action, mask, op, ring};
 use datetime_core::next::Next;
 use datetime_core::pages;
 use datetime_core::plan::{self, minute_of_week};
@@ -20,6 +24,7 @@ use e32::dprintln;
 use e32::server::{Message, Service};
 use e32::sys::{TVersion, err};
 use neoui_proto::clock::wire::Corrupt;
+use neoui_proto::clock::{tz, world};
 use neoui_proto::ipc::AppEvent;
 use neoui_proto::page::{
     NOTIFY_ONGOING, NOTIFY_SILENT_UPDATE, Notification, action as kind, style,
@@ -29,6 +34,13 @@ use neoui_proto::settings::Value;
 /// Days from Symbian's `TTime` zero to 1970-01-01.
 const TTIME_UNIX_DAYS: i64 = 719_540;
 const TIMER_RING: u32 = ring::id(ring::TIMER, 0);
+/// How far ahead the reminders are planned.
+const REMINDERS_AHEAD: i64 = 2 * DAY;
+/// The widest EVENT_QUERY (days).
+const QUERY_DAYS: i32 = 1000;
+/// The most calendars: EVENT_QUERY's hidden mask has 32 bits.
+const CALENDARS_MAX: usize = 32;
+const KERR_TOO_BIG: i32 = -40;
 
 /// UTC now in Unix ms, and the kernel's UTC offset in seconds (the shell sets it for the zone and summer time).
 fn clock() -> (i64, i32) {
@@ -47,6 +59,12 @@ struct Settings {
     snooze_min: u16,
     snooze_count: u8,
     h24: bool,
+    /// `calendar.ring`: a reminder opens Calendar's Ringing page (else its card only)
+    ring_reminders: bool,
+    /// `calendar.birthdays`
+    birthdays: bool,
+    /// the `time.zone` city's rule while `time.auto_zone` is off
+    city: Option<tz::Rule>,
 }
 
 pub struct Dt {
@@ -65,13 +83,27 @@ pub struct Dt {
     /// the running timer's card text as last posted ("" = no card)
     chrono: String,
     watchers: Vec<Rc<RefCell<Watcher>>>,
+    events: Store,
+    birthdays: Vec<Birthday>,
+    /// `contacts.rev` when the birthdays were read (`None`: not yet)
+    book_rev: Option<Option<i32>>,
+    /// the zone the calendar was last read in
+    zone: Local,
+    /// the reminders due from the last refresh to `REMINDERS_AHEAD` on: (utc, ring id)
+    reminders: Vec<(i64, u32)>,
+    /// snoozed reminders: (utc, ring id)
+    snoozed_reminders: Vec<(i64, u32)>,
+    /// the next event: (its start utc, it)
+    next_event: Option<(i64, Instance)>,
+    /// `reminders` and `next_event` hold until then (utc; `i64::MIN`: a change made them stale)
+    cal_until: i64,
 }
 
 impl Dt {
     pub fn start(ui: Ui) -> Self {
         // a restart's cards: their rings are gone
         let _ = ui.clear_cards();
-        for prefix in ["time.", "clock."] {
+        for prefix in ["time.", "clock.", "calendar.", "contacts.rev"] {
             if let Err(e) = ui.watch(prefix) {
                 dprintln!("dtsrv: settings watch {} refused ({})", prefix, e);
             }
@@ -95,6 +127,9 @@ impl Dt {
             alarms.as_slice().len(),
             timer.phase
         );
+        let (now_ms, offset) = clock();
+        // the seed only keeps new uids apart across restarts
+        let events = cal::load(now_ms as u64);
         let mut d = Self {
             ui,
             alarms,
@@ -105,11 +140,22 @@ impl Dt {
                 snooze_min: 5,
                 snooze_count: 3,
                 h24: true,
+                ring_reminders: true,
+                birthdays: true,
+                city: None,
             },
-            since: clock().0.div_euclid(1000),
+            since: now_ms.div_euclid(1000),
             published: Vec::new(),
             chrono: String::new(),
             watchers: Vec::new(),
+            events,
+            birthdays: Vec::new(),
+            book_rev: None,
+            zone: Local::Kernel(offset),
+            reminders: Vec::new(),
+            snoozed_reminders: Vec::new(),
+            next_event: None,
+            cal_until: i64::MIN,
         };
         d.read_settings();
         d
@@ -123,7 +169,10 @@ impl Dt {
     pub fn tick(&mut self) -> i32 {
         let (now_ms, offset) = clock();
         let now = now_ms.div_euclid(1000);
-        let p = plan::plan(&self.alarms, &self.timer, self.since, now, offset, &[]);
+        self.refresh_calendar(now, offset);
+        let mut extra = self.reminders.clone();
+        extra.extend_from_slice(&self.snoozed_reminders);
+        let p = plan::plan(&self.alarms, &self.timer, self.since, now, offset, &extra);
         self.since = now;
         for r in p.due {
             if !self.ringing.contains(&r) {
@@ -157,15 +206,90 @@ impl Dt {
             Ok(Value::Int(v)) => v,
             _ => default,
         };
-        self.settings = Settings {
+        let on = |name| !matches!(self.ui.get(name), Ok(Value::Bool(false)));
+        let city = match self.ui.get("time.zone") {
+            Ok(Value::Str(name)) if !on("time.auto_zone") => {
+                world::find(&name).and_then(|c| tz::Rule::parse(c.tz))
+            }
+            _ => None,
+        };
+        let settings = Settings {
             // both clamped into their types
             snooze_min: int("clock.snooze", 5).clamp(1, 60) as u16,
             snooze_count: int("clock.snooze_count", 3).clamp(0, 10) as u8,
-            h24: !matches!(self.ui.get("clock.24h"), Ok(Value::Bool(false))),
+            h24: on("clock.24h"),
+            ring_reminders: on("calendar.ring"),
+            birthdays: on("calendar.birthdays"),
+            city,
         };
+        let rev = match self.ui.get("contacts.rev") {
+            Ok(Value::Int(n)) => Some(n),
+            _ => None,
+        };
+        if settings.birthdays != self.settings.birthdays {
+            self.changed(mask::EVENTS);
+        }
+        self.settings = settings;
+        // NEOCONT saved the book
+        if self.book_rev != Some(rev) {
+            self.book_rev = Some(rev);
+            self.birthdays = cal::birthdays();
+            self.changed(mask::EVENTS);
+        }
+    }
+
+    /// The zone the calendar is read in now.
+    fn local(&self, offset: i32) -> Local {
+        self.settings
+            .city
+            .map_or(Local::Kernel(offset), Local::City)
+    }
+
+    /// Plans the reminders and finds the next event again when the stores, the zone or the day changed.
+    fn refresh_calendar(&mut self, now: i64, offset: i32) {
+        let zone = self.local(offset);
+        if zone != self.zone {
+            self.zone = zone;
+            self.cal_until = i64::MIN;
+            // local times moved
+            self.changed(mask::EVENTS | mask::TODOS);
+        }
+        if now < self.cal_until {
+            return;
+        }
+        // from the last plan on, so one due since then still rings; at most a day back (a jump forward)
+        let from = (self.since + 1).min(now).max(now - DAY);
+        self.reminders = self
+            .events
+            .reminders(from, now + REMINDERS_AHEAD, &zone)
+            .into_iter()
+            .map(|(at, id)| (at, ring::id(ring::REMINDER, id.0)))
+            .collect();
+        self.next_event = self
+            .events
+            .next_event(now, &zone)
+            .map(|i| (pim_ics::to_utc(i.start, &zone), i));
+        self.cal_until = self
+            .next_event
+            .as_ref()
+            .map_or(now + DAY, |(at, _)| (*at + 1).clamp(now + 1, now + DAY));
+    }
+
+    /// The events changed: re-plan, tell the watchers, save.
+    fn events_changed(&mut self, bits: u32) -> Result<(), i32> {
+        self.cal_until = i64::MIN;
+        self.changed(bits);
+        cal::save(
+            &self.events,
+            bits & mask::EVENTS != 0,
+            bits & mask::TODOS != 0,
+        )
     }
 
     fn fire(&mut self, r: u32, now_ms: i64) {
+        if ring::kind(r) == ring::REMINDER {
+            return self.fire_reminder(r);
+        }
         let (title, text, actions) = match ring::kind(r) {
             ring::ALARM => {
                 // the planner's ids come from the alarms
@@ -190,7 +314,7 @@ impl Dt {
             _ => return,
         };
         dprintln!("dtsrv: fire {:#x} {} {}", r, title, text);
-        self.open(pages::clock::RING, &r.to_string());
+        self.open("clock", pages::clock::RING, &r.to_string());
         let n = Notification {
             id: r,
             title,
@@ -256,6 +380,16 @@ impl Dt {
                 self.changed(mask::TIMERS);
                 self.save_timer()
             }
+            ring::REMINDER => {
+                if matches!(what, action::SNOOZE | action::PLUS_MINUTE) {
+                    let at = now_ms.div_euclid(1000) + i64::from(self.settings.snooze_min) * 60;
+                    self.snoozed_reminders.push((at, r));
+                    dprintln!("dtsrv: action {:#x} snooze -> {}", r, at);
+                } else {
+                    dprintln!("dtsrv: action {:#x} dismiss", r);
+                }
+                Ok(())
+            }
             _ => Ok(()),
         };
         self.remove_card(r);
@@ -265,10 +399,19 @@ impl Dt {
 
     /// A tap on one of DTSRV's cards (action 0) or on its button `action - 1`.
     fn card(&mut self, id: u32, action: u16) {
+        if ring::kind(id) == ring::REMINDER {
+            let what = match action {
+                0 => return self.open_event(id),
+                1 => action::SNOOZE,
+                _ => action::DISMISS,
+            };
+            let _ = self.act(id, what);
+            return;
+        }
         let timer = ring::kind(id) == ring::TIMER;
         if self.ringing.contains(&id) {
             let what = match (timer, action) {
-                (_, 0) => return self.open(pages::clock::RING, &id.to_string()),
+                (_, 0) => return self.open("clock", pages::clock::RING, &id.to_string()),
                 (true, 1) => action::PLUS_MINUTE,
                 (true, _) => action::STOP,
                 (false, 1) => action::SNOOZE,
@@ -276,7 +419,7 @@ impl Dt {
             };
             let _ = self.act(id, what);
         } else if timer && action == 0 {
-            self.open(pages::clock::TIMER, "");
+            self.open("clock", pages::clock::TIMER, "");
         } else if timer && action == 1 {
             // the running timer's Pause
             self.timer.pause(clock().0);
@@ -331,20 +474,123 @@ impl Dt {
         self.published = b;
     }
 
-    /// The `dtsrv.next` blob (the events come with DT3).
+    /// The `dtsrv.next` blob: the next alarm and the next event.
     fn next(&self, now: i64, offset: i32) -> Vec<u8> {
         let mut next = Next::default();
         if let Some((at, a)) = plan::next_alarm(&self.alarms, now, offset) {
             next.alarm_at = at;
             next.alarm_label = a.label.clone();
         }
+        if let Some((at, e)) = &self.next_event {
+            next.event_at = *at;
+            next.event_title.clone_from(&e.title);
+            next.event_colour = e.colour;
+            next.event_all_day = e.all_day;
+        }
         next.encode()
     }
 
-    fn open(&self, page: u16, arg: &str) {
-        if let Err(e) = self.ui.open("clock", page, arg, OPEN_WAKE) {
-            dprintln!("dtsrv: OPEN clock {} {} refused ({})", page, arg, e);
+    /// Opens app `key` on `page`, waking the screen and closing the shade.
+    fn open(&self, key: &str, page: u16, arg: &str) {
+        if let Err(e) = self.ui.open(key, page, arg, OPEN_WAKE) {
+            dprintln!("dtsrv: OPEN {} {} {} refused ({})", key, page, arg, e);
         }
+    }
+
+    /// A reminder's card was tapped: its event (or the to-do list).
+    fn open_event(&self, r: u32) {
+        match self.ring_info(r) {
+            Some(i) if i.todo => self.open("calendar", pages::calendar::TODO, ""),
+            Some(i) => self.open("calendar", pages::calendar::EVENT, &i.uid),
+            None => self.open("calendar", pages::calendar::DAY, ""),
+        }
+    }
+
+    /// What reminder ring `r` is about: the occurrence (or to-do) its id stands for.
+    fn ring_info(&self, r: u32) -> Option<RingInfo> {
+        let (uid, start) = self.events.reminder(ReminderId(ring::item(r)))?;
+        let uid = String::from(uid);
+        let zone = &self.zone;
+        let local = pim_ics::to_wall(start, zone);
+        let day = local.div_euclid(DAY);
+        let ringing = self.ringing.contains(&r);
+        if let Some(i) = self
+            .events
+            .query(day, day, 0, zone, &[])
+            .into_iter()
+            .find(|i| i.uid == uid && i.start == local)
+        {
+            return Some(RingInfo {
+                kind: ring::REMINDER,
+                todo: false,
+                all_day: i.all_day,
+                ringing,
+                start,
+                end: pim_ics::to_utc(i.end, zone),
+                colour: i.colour,
+                uid,
+                title: i.title,
+                place: i.place,
+            });
+        }
+        let t = self.events.todos(zone).into_iter().find(|t| t.uid == uid)?;
+        Some(RingInfo {
+            kind: ring::REMINDER,
+            todo: true,
+            all_day: t.due_all_day,
+            ringing,
+            start,
+            end: start,
+            colour: 0,
+            uid,
+            title: t.title,
+            place: String::new(),
+        })
+    }
+
+    /// A reminder is due: Calendar's Ringing page (`calendar.ring`) and always its card, Snooze and Dismiss.
+    fn fire_reminder(&mut self, r: u32) {
+        self.snoozed_reminders.retain(|s| s.1 != r);
+        let Some(info) = self.ring_info(r) else {
+            dprintln!("dtsrv: reminder {} is gone", ring::item(r));
+            return;
+        };
+        dprintln!("dtsrv: reminder {} {}", ring::item(r), info.uid);
+        if self.settings.ring_reminders {
+            self.open("calendar", pages::calendar::RING, &r.to_string());
+        }
+        let local = pim_ics::to_wall(info.start, &self.zone).rem_euclid(DAY);
+        // the hour and minute of a day
+        let (h, m) = ((local / 3600) as u8, (local / 60 % 60) as u8);
+        let when = match (info.all_day, info.todo) {
+            (true, false) => String::from("All day"),
+            (true, true) => String::from("Due today"),
+            (false, false) => format_hm(h, m, self.settings.h24),
+            (false, true) => format!("Due {}", format_hm(h, m, self.settings.h24)),
+        };
+        let text = if info.place.is_empty() {
+            when
+        } else {
+            format!("{} · {}", when, info.place)
+        };
+        let title = if info.title.is_empty() {
+            String::from("Reminder")
+        } else {
+            info.title
+        };
+        let n = Notification {
+            id: r,
+            title,
+            text,
+            page: pages::calendar::EVENT,
+            actions: ["Snooze", "Dismiss"].map(String::from).to_vec(),
+            action_kinds: vec![kind::IN_PLACE; 2],
+            flags: NOTIFY_ONGOING,
+            ..Notification::default()
+        };
+        self.post(&n);
+        self.ringing.push(r);
+        self.changed(mask::RINGS);
     }
 
     fn post(&self, n: &Notification) {
@@ -489,8 +735,179 @@ impl Dt {
             self.stop_rings(ring::TIMER);
             saved = saved.and(self.save_timer().map(|()| 0));
         }
+        let (events, todos) = (which & mask::EVENTS != 0, which & mask::TODOS != 0);
+        if events || todos {
+            self.events = cal::cleared(&self.events, events, todos);
+            self.snoozed_reminders.clear();
+            self.stop_rings(ring::REMINDER);
+            saved = saved.and(
+                self.events_changed(which & (mask::EVENTS | mask::TODOS))
+                    .map(|()| 0),
+            );
+        }
         self.changed(which & (mask::ALARMS | mask::TIMERS));
         saved
+    }
+
+    // --- the calendar's requests
+
+    fn birthdays(&self) -> &[Birthday] {
+        if self.settings.birthdays {
+            &self.birthdays
+        } else {
+            &[]
+        }
+    }
+
+    fn event_query(&self, msg: &Message) -> Result<i32, i32> {
+        let (from, to) = (msg.int(0), msg.int(1));
+        if to < from || to - from >= QUERY_DAYS {
+            return Err(err::KERR_ARGUMENT);
+        }
+        // the mask is bits
+        let hidden = msg.int(2) as u32;
+        let v = self.events.query(
+            i64::from(from),
+            i64::from(to),
+            hidden,
+            &self.zone,
+            self.birthdays(),
+        );
+        reply(msg, 3, &wire::encode_instances(&v))
+    }
+
+    fn event_put(&mut self, msg: &Message) -> Result<i32, i32> {
+        let d = EventDraft::decode(&msg.read8_vec(0)?).map_err(|_| err::KERR_ARGUMENT)?;
+        let uid = self
+            .events
+            .put(&d, &self.zone, clock().0.div_euclid(1000))
+            .ok_or(err::KERR_NOT_FOUND)?;
+        dprintln!("dtsrv: event put {}", uid);
+        self.events_changed(mask::EVENTS)?;
+        reply(msg, 1, uid.as_bytes())
+    }
+
+    fn event_del(&mut self, msg: &Message) -> Result<i32, i32> {
+        let (uid, only) =
+            ipc::read_event_key(&msg.read8_vec(0)?).map_err(|_| err::KERR_ARGUMENT)?;
+        if !self.events.del(&uid, only, &self.zone) {
+            return Err(err::KERR_NOT_FOUND);
+        }
+        dprintln!("dtsrv: event del {} {:?}", uid, only);
+        self.events_changed(mask::EVENTS).map(|()| 0)
+    }
+
+    fn event_get(&self, msg: &Message) -> Result<i32, i32> {
+        let (uid, only) =
+            ipc::read_event_key(&msg.read8_vec(0)?).map_err(|_| err::KERR_ARGUMENT)?;
+        let d = self
+            .events
+            .get(&uid, only, &self.zone)
+            .ok_or(err::KERR_NOT_FOUND)?;
+        reply(msg, 1, &d.encode())
+    }
+
+    fn todo_put(&mut self, msg: &Message) -> Result<i32, i32> {
+        let t = Todo::decode(&msg.read8_vec(0)?).map_err(|_| err::KERR_ARGUMENT)?;
+        let uid = self
+            .events
+            .put_todo(&t, &self.zone, clock().0.div_euclid(1000))
+            .ok_or(err::KERR_NOT_FOUND)?;
+        self.events_changed(mask::TODOS)?;
+        reply(msg, 1, uid.as_bytes())
+    }
+
+    fn todo_del(&mut self, msg: &Message) -> Result<i32, i32> {
+        let uid = String::from_utf8(msg.read8_vec(0)?).map_err(|_| err::KERR_ARGUMENT)?;
+        if !self.events.del_todo(&uid) {
+            return Err(err::KERR_NOT_FOUND);
+        }
+        self.events_changed(mask::TODOS).map(|()| 0)
+    }
+
+    fn import(&mut self, msg: &Message) -> Result<i32, i32> {
+        if msg.des_len(0)? > ipc::IMPORT_MAX {
+            return Err(KERR_TOO_BIG);
+        }
+        let b = msg.read8_vec(0)?;
+        let text = String::from_utf8_lossy(&b);
+        let cal = usize::try_from(msg.int(1)).unwrap_or(0);
+        let (added, clashes) = self.events.import(&text, cal, clock().0.div_euclid(1000));
+        dprintln!("dtsrv: import {} {}", added, clashes.len());
+        if added > 0 {
+            self.events_changed(mask::EVENTS | mask::TODOS)?;
+        }
+        Ok(ipc::import_reply(added, clashes.len()))
+    }
+
+    fn export(&self, msg: &Message) -> Result<i32, i32> {
+        let uid = String::from_utf8(msg.read8_vec(0)?).map_err(|_| err::KERR_ARGUMENT)?;
+        let uid = (!uid.is_empty()).then_some(uid.as_str());
+        if let Some(u) = uid {
+            let known = self.events.get(u, None, &self.zone).is_some()
+                || self.events.todos(&self.zone).iter().any(|t| t.uid == u);
+            if !known {
+                return Err(err::KERR_NOT_FOUND);
+            }
+        }
+        reply(msg, 1, self.events.export(uid).as_bytes())
+    }
+
+    fn calendars(&self, msg: &Message) -> Result<i32, i32> {
+        let hidden = match self.ui.get("calendar.hidden") {
+            Ok(Value::Bytes(b)) => b,
+            _ => Vec::new(),
+        };
+        let v: Vec<CalendarInfo> = self
+            .events
+            .calendars()
+            .iter()
+            .enumerate()
+            .map(|(i, c)| CalendarInfo {
+                name: c.name.clone(),
+                colour: c.colour,
+                // at most CALENDARS_MAX
+                hidden: hidden.contains(&(i as u8)),
+                events: u16::try_from(self.events.count(i)).unwrap_or(u16::MAX),
+            })
+            .collect();
+        reply(msg, 0, &ipc::encode_calendars(&v))
+    }
+
+    fn calendar_put(&mut self, msg: &Message) -> Result<i32, i32> {
+        // the colour is 0xRRGGBB
+        let colour = msg.int(1) as u32 & 0x00FF_FFFF;
+        let name = String::from_utf8(msg.read8_vec(2)?).map_err(|_| err::KERR_ARGUMENT)?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(err::KERR_ARGUMENT);
+        }
+        let n = self.events.calendars().len();
+        let i = match msg.int(0) {
+            -1 if n >= CALENDARS_MAX => return Err(err::KERR_OVERFLOW),
+            -1 => self.events.add_calendar(name, colour),
+            i => {
+                let i = usize::try_from(i)
+                    .ok()
+                    .filter(|&i| i < n)
+                    .ok_or(err::KERR_NOT_FOUND)?;
+                self.events.set_calendar(i, name, colour);
+                i
+            }
+        };
+        self.events_changed(mask::EVENTS)?;
+        // at most CALENDARS_MAX
+        Ok(i as i32)
+    }
+
+    fn ring_info_op(&self, msg: &Message) -> Result<i32, i32> {
+        // the ring id travels as the word it is
+        let r = msg.int(0) as u32;
+        if ring::kind(r) != ring::REMINDER {
+            return Err(err::KERR_NOT_SUPPORTED);
+        }
+        let info = self.ring_info(r).ok_or(err::KERR_NOT_FOUND)?;
+        reply(msg, 1, &info.encode())
     }
 }
 
@@ -538,7 +955,18 @@ impl Service for Dt {
             // the ring id travels as the word it is
             op::RING_ACTION => self.act(msg.int(0) as u32, msg.int(1)).map(|()| 0),
             op::CLEAR => self.clear(msg.int(0) as u32),
-            // the calendar's (DT3)
+            op::EVENT_QUERY => self.event_query(&msg),
+            op::EVENT_PUT => self.event_put(&msg),
+            op::EVENT_DEL => self.event_del(&msg),
+            op::EVENT_GET => self.event_get(&msg),
+            op::TODO_LIST => reply(&msg, 0, &wire::encode_todos(&self.events.todos(&self.zone))),
+            op::TODO_PUT => self.todo_put(&msg),
+            op::TODO_DEL => self.todo_del(&msg),
+            op::IMPORT_ICS => self.import(&msg),
+            op::EXPORT_ICS => self.export(&msg),
+            op::CALENDARS => self.calendars(&msg),
+            op::CALENDAR_PUT => self.calendar_put(&msg),
+            op::RING_INFO => self.ring_info_op(&msg),
             _ => Err(err::KERR_NOT_SUPPORTED),
         };
         msg.complete(r.unwrap_or_else(|e| e));
@@ -553,9 +981,12 @@ impl Service for Dt {
     }
 }
 
-/// Writes `data` into the client's descriptor `slot`; the reply is its length.
+/// Writes `data` into the client's descriptor `slot` when it fits; the reply is its length either way, so a client
+/// with too small a buffer asks again with that much room (`datetime_core::ipc`).
 fn reply(msg: &Message, slot: usize, data: &[u8]) -> Result<i32, i32> {
-    msg.write8(slot, data, 0)?;
+    if data.len() <= msg.des_max_len(slot)? {
+        msg.write8(slot, data, 0)?;
+    }
     // the stores are far below 2 GB
     Ok(data.len() as i32)
 }
