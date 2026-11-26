@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# The Calendar app (NEOCAL.EXE): a separate Symbian process that draws into a surface the UI server gives it.
+[package]
+name = "neocal"
+description = "NEOCAL.EXE: Calendar v2 (Month, Week, Day, To-do) on DTSRV's events and to-dos (NeoSymbian/datetime)"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-only"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+test = false
+
+[dependencies]
+e32.workspace = true
+neoui-proto.workspace = true
+neoapp.workspace = true
+slint.workspace = true
+datetime-core.workspace = true
+calendar-core.workspace = true
+pim-ics.workspace = true
+calendar-ui.workspace = true
+dt-client.workspace = true

@@ -1,0 +1,271 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// The views opened from the header: Settings (clk2-settings), Add city (clk2-world-add) and Set time (clk2-set-time,
+// with the kit's date and time sheets).
+import { Theme, NeoList, Glyph, SearchField, Switch } from "@neoui/kit.slint";
+import { Segmented } from "@dt-shared/segmented.slint";
+import { Label, ValueRow, SwitchRow } from "parts.slint";
+import { ClockState } from "state.slint";
+
+component Section inherits HorizontalLayout {
+    in property <string> text;
+    in property <length> h: 36 * Theme.dp;
+    height: root.h;
+    padding-left: 16 * Theme.dp;
+    padding-bottom: 6 * Theme.dp;
+    Label {
+        text: root.text.to-uppercase();
+        vertical-alignment: bottom;
+    }
+}
+
+export component SettingsView inherits Rectangle {
+    background: Theme.bg;
+    NeoList {
+        VerticalLayout {
+            width: root.width;
+            alignment: start;
+            Section {
+                text: "Clock face";
+            }
+
+            HorizontalLayout {
+                padding-left: 16 * Theme.dp;
+                padding-right: 16 * Theme.dp;
+                padding-top: 6 * Theme.dp;
+                padding-bottom: 12 * Theme.dp;
+                Segmented {
+                    items: ["Digital", "Analog"];
+                    current: ClockState.analog ? 1 : 0;
+                    picked(i) => {
+                        ClockState.set-face(i);
+                    }
+                }
+            }
+
+            SwitchRow {
+                title: "Show seconds";
+                on: ClockState.show-seconds;
+                toggled(on) => {
+                    ClockState.set-seconds(on);
+                }
+            }
+
+            SwitchRow {
+                title: "Show date";
+                on: ClockState.show-date;
+                toggled(on) => {
+                    ClockState.set-show-date(on);
+                }
+            }
+
+            SwitchRow {
+                title: "24-hour time";
+                subtitle: ClockState.h24 ? "Off: 2:30 PM" : "On: 14:30";
+                on: ClockState.h24;
+                toggled(on) => {
+                    ClockState.set-h24(on);
+                }
+            }
+
+            Section {
+                text: "Alarms";
+                h: 40 * Theme.dp;
+            }
+
+            ValueRow {
+                has-icon: false;
+                title-first: true;
+                caption: "Snooze";
+                value: ClockState.snooze-text;
+                clicked => {
+                    ClockState.snooze-sheet = true;
+                }
+            }
+
+            ValueRow {
+                has-icon: false;
+                title-first: true;
+                caption: "Default sound";
+                value: ClockState.sound-name;
+                clicked => {
+                    ClockState.open-sound();
+                }
+            }
+
+            SwitchRow {
+                title: "Next alarm in the shade";
+                on: ClockState.shade-next;
+                toggled(on) => {
+                    ClockState.set-shade-next(on);
+                }
+            }
+        }
+    }
+}
+
+export component CitiesView inherits Rectangle {
+    background: Theme.bg;
+    VerticalLayout {
+        HorizontalLayout {
+            padding-top: 10 * Theme.dp;
+            padding-bottom: 10 * Theme.dp;
+            padding-left: 12 * Theme.dp;
+            padding-right: 12 * Theme.dp;
+            SearchField {
+                placeholder: "Search cities";
+                text <=> ClockState.city-query;
+                changed text => {
+                    ClockState.city-searched(self.text);
+                }
+            }
+        }
+
+        NeoList {
+            vertical-stretch: 1;
+            VerticalLayout {
+                width: root.width;
+                alignment: start;
+                for c in ClockState.catalogue: VerticalLayout {
+                    if c.section != "": HorizontalLayout {
+                        height: 28 * Theme.dp;
+                        padding-left: 16 * Theme.dp;
+                        Label {
+                            text: c.section;
+                            vertical-alignment: center;
+                        }
+                    }
+                    Rectangle {
+                        height: 60 * Theme.dp;
+                        background: t.pressed ? Theme.pressed : transparent;
+                        t := TouchArea {
+                            enabled: !c.added;
+                            clicked => {
+                                ClockState.pick-city(c.index);
+                            }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 16 * Theme.dp;
+                            padding-right: 16 * Theme.dp;
+                            spacing: 14 * Theme.dp;
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 3 * Theme.dp;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: c.name;
+                                    color: Theme.text;
+                                    font-size: 16 * Theme.dp;
+                                    font-weight: 500;
+                                }
+
+                                Text {
+                                    text: c.detail;
+                                    color: Theme.text-dim;
+                                    font-size: 13.5 * Theme.dp;
+                                }
+                            }
+
+                            if c.added: HorizontalLayout {
+                                spacing: 6 * Theme.dp;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Glyph {
+                                        source: @image-url("@neoui/icons/sys/check.svg");
+                                        size: 18 * Theme.dp;
+                                        colorize: Theme.ok;
+                                    }
+                                }
+
+                                Text {
+                                    text: "Added";
+                                    color: Theme.ok;
+                                    font-size: 13.5 * Theme.dp;
+                                    vertical-alignment: center;
+                                }
+                            }
+                            if !c.added: Text {
+                                text: c.time;
+                                color: Theme.text-secondary;
+                                font-size: 15 * Theme.dp;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        Rectangle {
+                            x: 16 * Theme.dp;
+                            y: parent.height - self.height;
+                            width: parent.width - self.x;
+                            height: max(1px, Theme.dp / 3);
+                            background: #ffffff12;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component SetTimeView inherits Rectangle {
+    background: Theme.bg;
+    VerticalLayout {
+        alignment: start;
+        Rectangle {
+            height: 60 * Theme.dp;
+            ValueRow {
+                width: parent.width;
+                icon: @image-url("@neoui/icons/sys/refresh.svg");
+                caption: "Automatic time";
+                value: ClockState.auto-text;
+                chevron: false;
+            }
+
+            // shown, not switched here: the shell owns time.auto (Settings → Date & time)
+            Switch {
+                x: parent.width - self.width - 16 * Theme.dp;
+                on: ClockState.auto-on;
+                label: "Automatic time";
+                opacity: Theme.disabled;
+                TouchArea { }
+            }
+        }
+
+        ValueRow {
+            icon: @image-url("@neoui/icons/sys/today.svg");
+            caption: "Date";
+            value: ClockState.date-text;
+            clicked => {
+                ClockState.date-sheet = true;
+            }
+        }
+
+        ValueRow {
+            icon: @image-url("@neoui/icons/sys/clock.svg");
+            caption: "Time";
+            value: ClockState.time-text;
+            clicked => {
+                ClockState.clock-sheet = true;
+            }
+        }
+
+        ValueRow {
+            icon: @image-url("@neoui/icons/sys/world.svg");
+            caption: "Time zone";
+            value: ClockState.zone-text;
+            clicked => {
+                ClockState.next-zone();
+            }
+        }
+
+        Text {
+            x: 16 * Theme.dp;
+            width: parent.width - 32 * Theme.dp;
+            height: self.preferred-height + 24 * Theme.dp;
+            text: "Saved to the phone’s clock and kept across restarts. Alarms and reminders move with it.";
+            color: Theme.text-dim;
+            font-size: 13.5 * Theme.dp;
+            wrap: word-wrap;
+            vertical-alignment: center;
+        }
+    }
+}

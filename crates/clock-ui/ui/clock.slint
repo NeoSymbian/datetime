@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// The Clock tab (clk2-clock, -analog, -12h): the TimeHero, then the World card (World was merged in, DT02). A
+// long-press on a city asks to remove it; + in the header adds one.
+import { Theme, NeoList } from "@neoui/kit.slint";
+import { TimeHero } from "@dt-shared/time-hero.slint";
+import { TimeCard, CityRow } from "@dt-shared/time-card.slint";
+import { Label } from "parts.slint";
+import { ClockState } from "state.slint";
+
+export component ClockPage inherits Rectangle {
+    NeoList {
+        VerticalLayout {
+            width: root.width;
+            alignment: start;
+            TimeHero {
+                hours: ClockState.hours;
+                minutes: ClockState.minutes;
+                lead-zero: ClockState.h24;
+                seconds: ClockState.seconds;
+                am-pm: ClockState.am-pm;
+                date: ClockState.date;
+                chips: ClockState.chips;
+                analog: ClockState.analog;
+                face: ClockState.face;
+            }
+
+            if ClockState.cities.length > 0: VerticalLayout {
+                spacing: 10 * Theme.dp;
+                padding-top: 4 * Theme.dp;
+                padding-left: 12 * Theme.dp;
+                padding-right: 12 * Theme.dp;
+                padding-bottom: 12 * Theme.dp;
+                HorizontalLayout {
+                    padding-left: 4 * Theme.dp;
+                    padding-right: 4 * Theme.dp;
+                    Label {
+                        text: ClockState.world-title.to-uppercase();
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: ClockState.here;
+                        color: Theme.text-dim;
+                        font-size: 13 * Theme.dp;
+                        vertical-alignment: center;
+                    }
+                }
+
+                TimeCard {
+                    VerticalLayout {
+                        for c[i] in ClockState.cities: CityRow {
+                            name: c.name;
+                            when: c.when;
+                            time: c.time;
+                            night: c.night;
+                            last: i == ClockState.cities.length - 1;
+                            long-pressed => {
+                                ClockState.city-held(i);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

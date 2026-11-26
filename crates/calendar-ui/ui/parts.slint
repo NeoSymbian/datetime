@@ -1,0 +1,400 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Calendar's small parts: the glyphs by number, the form and detail rows, section titles, radio rows, digit numbers.
+import { Theme, Glyph } from "@neoui/kit.slint";
+
+// Slint bakes only the glyphs its .slint literals use (plus ASCII and the kit's keyboard Alphabets): events and
+// to-dos come from anywhere (an imported .ics, "Harbour Café"), so the app carries Latin-1, Latin Extended-A and the
+// typographic marks here.
+export component Letters inherits Text {
+    visible: false;
+    text: "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ"
+        + "ĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľĿŀŁłŃńŅņŇňŉŊŋŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžſ"
+        + "‘’“”„–—·•…€£¥°±×÷";
+}
+
+export global Glyphs {
+    // Detail.glyph: 0 place, 1 repeat, 2 bell, 3 notes, 4 to-do, 5 calendar, 6 cake, 7 clock, 8 list, 9 day, 10 info
+    public pure function of(n: int) -> image {
+        if n == 0 {
+            return @image-url("@neoui/icons/sys/location.svg");
+        }
+        if n == 1 {
+            return @image-url("@neoui/icons/sys/repeat.svg");
+        }
+        if n == 2 {
+            return @image-url("@neoui/icons/sys/bell.svg");
+        }
+        if n == 3 {
+            return @image-url("@neoui/icons/sys/note.svg");
+        }
+        if n == 4 {
+            return @image-url("@dt-shared/icons/todo.svg");
+        }
+        if n == 6 {
+            return @image-url("@dt-shared/icons/cake.svg");
+        }
+        if n == 7 {
+            return @image-url("@neoui/icons/sys/clock.svg");
+        }
+        if n == 8 {
+            return @image-url("@dt-shared/icons/todo.svg");
+        }
+        if n == 9 {
+            return @image-url("@dt-shared/icons/day.svg");
+        }
+        if n == 10 {
+            return @image-url("@neoui/icons/sys/info.svg");
+        }
+        return @image-url("@dt-shared/icons/month.svg");
+    }
+}
+
+// 1 px between rows, from the text's start
+export component Divider inherits Rectangle {
+    in property <length> inset: 52 * Theme.dp;
+    height: 1px;
+    Rectangle {
+        x: root.inset;
+        width: parent.width - root.inset;
+        background: #ffffff12;
+    }
+}
+
+// "OVERDUE", "VIEW": 11.7/600 capitals
+export component Caps inherits Text {
+    font-size: 11.7 * Theme.dp;
+    font-weight: 600;
+    color: Theme.text-dim;
+}
+
+// A form's small label over its field ("Title", "Location")
+export component FieldLabel inherits Text {
+    font-size: 13 * Theme.dp;
+    color: Theme.text-dim;
+}
+
+// A tappable form row: glyph, a small label over the value (with a calendar's dot), a chevron (60 dp)
+export component FieldRow inherits Rectangle {
+    in property <int> glyph: -1;
+    in property <string> label;
+    in property <string> value;
+    in property <color> dot: transparent;
+    in property <bool> chevron: true;
+    in property <bool> divider: true;
+    callback clicked();
+    height: 60 * Theme.dp;
+    background: touch.pressed ? Theme.pressed : transparent;
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 14 * Theme.dp;
+        spacing: 14 * Theme.dp;
+        if root.glyph >= 0: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: Glyphs.of(root.glyph);
+                size: 22 * Theme.dp;
+                colorize: Theme.text-dim;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2 * Theme.dp;
+            horizontal-stretch: 1;
+            Text {
+                text: root.label;
+                font-size: 12.5 * Theme.dp;
+                color: Theme.text-dim;
+            }
+            HorizontalLayout {
+                spacing: 8 * Theme.dp;
+                if root.dot != transparent: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 10 * Theme.dp;
+                        height: 10 * Theme.dp;
+                        border-radius: 5 * Theme.dp;
+                        background: root.dot;
+                    }
+                }
+                Text {
+                    text: root.value;
+                    font-size: Theme.font-body;
+                    color: Theme.text;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+            }
+        }
+
+        if root.chevron: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: @image-url("@neoui/icons/sys/chevron_right.svg");
+                size: 20 * Theme.dp;
+                colorize: Theme.text-dim;
+            }
+        }
+    }
+
+    if root.divider: Divider {
+        y: parent.height - 1px;
+        inset: root.glyph >= 0 ? 52 * Theme.dp : 16 * Theme.dp;
+    }
+}
+
+// A detail of the event or birthday view: glyph, the text (16/500) over its label (13.5 dim); notes wrap
+export component DetailRow inherits Rectangle {
+    in property <int> glyph;
+    in property <string> title;
+    in property <string> label;
+    in property <bool> divider: true;
+    callback clicked();
+    min-height: 60 * Theme.dp;
+    background: touch.pressed ? Theme.pressed : transparent;
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        padding-top: root.label == "" ? 12 * Theme.dp : 0;
+        padding-bottom: root.label == "" ? 12 * Theme.dp : 0;
+        spacing: 14 * Theme.dp;
+        VerticalLayout {
+            alignment: root.label == "" ? start : center;
+            Glyph {
+                source: Glyphs.of(root.glyph);
+                size: 22 * Theme.dp;
+                colorize: Theme.text-dim;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 3 * Theme.dp;
+            Text {
+                text: root.title;
+                font-size: root.label == "" ? 15 * Theme.dp : Theme.font-body;
+                font-weight: root.label == "" ? 400 : 500;
+                color: root.label == "" ? Theme.text-secondary : Theme.text;
+                wrap: word-wrap;
+            }
+            if root.label != "": Text {
+                text: root.label;
+                font-size: Theme.font-label;
+                color: Theme.text-dim;
+            }
+        }
+    }
+
+    if root.divider && root.label != "": Divider {
+        y: parent.height - 1px;
+    }
+}
+
+// the kit Switch's look, without its own touch (the row takes the tap)
+export component Toggle inherits Rectangle {
+    in property <bool> on;
+    width: 46 * Theme.dp;
+    height: 28 * Theme.dp;
+    border-radius: self.height / 2;
+    background: root.on ? Theme.accent : Theme.track;
+    Rectangle {
+        x: root.on ? parent.width - self.width - 3 * Theme.dp : 3 * Theme.dp;
+        width: 22 * Theme.dp;
+        height: 22 * Theme.dp;
+        border-radius: self.height / 2;
+        background: root.on ? white : #c9ccd1;
+    }
+}
+
+// A switch row of a form ("All day")
+export component SwitchRow inherits Rectangle {
+    in property <int> glyph: -1;
+    in property <string> title;
+    in property <string> sub;
+    in-out property <bool> on;
+    callback toggled(bool);
+    height: root.sub == "" ? 56 * Theme.dp : 60 * Theme.dp;
+    TouchArea {
+        clicked => {
+            root.on = !root.on;
+            root.toggled(root.on);
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        spacing: 14 * Theme.dp;
+        if root.glyph >= 0: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: Glyphs.of(root.glyph);
+                size: 22 * Theme.dp;
+                colorize: Theme.text-dim;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 2 * Theme.dp;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                font-size: Theme.font-body;
+                color: Theme.text;
+            }
+            if root.sub != "": Text {
+                text: root.sub;
+                font-size: 12 * Theme.dp;
+                color: Theme.text-dim;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Toggle {
+                on: root.on;
+            }
+        }
+    }
+}
+
+// One radio choice of a sheet (Repeat, Reminder): a 22 dp radio before the text, 46 dp
+export component RadioRow inherits Rectangle {
+    in property <string> text;
+    in property <bool> on;
+    callback clicked();
+    height: 46 * Theme.dp;
+    background: touch.pressed ? Theme.pressed : transparent;
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        spacing: 14 * Theme.dp;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 22 * Theme.dp;
+                height: self.width;
+                border-radius: self.width / 2;
+                border-width: 2 * Theme.dp;
+                border-color: root.on ? Theme.accent : Theme.text-dim;
+                if root.on: Rectangle {
+                    width: 10 * Theme.dp;
+                    height: self.width;
+                    border-radius: self.width / 2;
+                    background: Theme.accent;
+                }
+            }
+        }
+
+        Text {
+            text: root.text;
+            font-size: Theme.font-body;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// A number in the display digits (the to-dos done: "3"), `h` tall
+export component Number inherits HorizontalLayout {
+    in property <int> value;
+    in property <length> h: 48 * Theme.dp;
+    property <[image]> d: [
+        @image-url("@neoui/icons/digits/d0.svg"), @image-url("@neoui/icons/digits/d1.svg"),
+        @image-url("@neoui/icons/digits/d2.svg"), @image-url("@neoui/icons/digits/d3.svg"),
+        @image-url("@neoui/icons/digits/d4.svg"), @image-url("@neoui/icons/digits/d5.svg"),
+        @image-url("@neoui/icons/digits/d6.svg"), @image-url("@neoui/icons/digits/d7.svg"),
+        @image-url("@neoui/icons/digits/d8.svg"), @image-url("@neoui/icons/digits/d9.svg"),
+    ];
+    spacing: root.h * 0.07;
+    height: root.h;
+    for n in (root.value >= 10 ? [Math.mod(Math.floor(root.value / 10), 10), Math.mod(root.value, 10)] : [Math.max(0, root.value)]): Image {
+        width: root.h * 14 / 24;
+        height: root.h;
+        source: root.d[n];
+    }
+}
+
+// "● Projects": a calendar's name on a pill of its colour
+export component CalPill inherits Rectangle {
+    in property <string> text;
+    in property <color> tint;
+    height: 26 * Theme.dp;
+    width: row.preferred-width;
+    border-radius: 13 * Theme.dp;
+    background: root.tint.with-alpha(0.15);
+    row := HorizontalLayout {
+        padding-left: 10 * Theme.dp;
+        padding-right: 10 * Theme.dp;
+        spacing: 6 * Theme.dp;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 8 * Theme.dp;
+                height: 8 * Theme.dp;
+                border-radius: 4 * Theme.dp;
+                background: root.tint;
+            }
+        }
+
+        Text {
+            text: root.text;
+            font-size: 13 * Theme.dp;
+            font-weight: 600;
+            color: root.tint.mix(white, 0.45);
+            vertical-alignment: center;
+        }
+    }
+}
+
+// a round button with a glyph and a label under it (the birthday's Call, Message, Contact)
+export component RoundAction inherits VerticalLayout {
+    in property <image> icon;
+    in property <string> text;
+    callback clicked();
+    spacing: 8 * Theme.dp;
+    width: 80 * Theme.dp;
+    HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 52 * Theme.dp;
+            height: 52 * Theme.dp;
+            border-radius: self.width / 2;
+            background: touch.pressed ? Theme.pressed : Theme.pill;
+            Glyph {
+                source: root.icon;
+                size: 22 * Theme.dp;
+            }
+
+            touch := TouchArea {
+                clicked => {
+                    root.clicked();
+                }
+            }
+        }
+    }
+
+    Text {
+        text: root.text;
+        font-size: 13.5 * Theme.dp;
+        color: Theme.text-secondary;
+        horizontal-alignment: center;
+    }
+}

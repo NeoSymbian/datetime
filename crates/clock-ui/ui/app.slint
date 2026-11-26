@@ -1,0 +1,259 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// NEOCLOCK.EXE (Clock v2, docs datetime.md DT2): three footer tabs, Clock · Alarms · Timers (DT02), under a header
+// that names the tab [name · + · ⋮]. The views cover header and footer with their own: [✕ Edit alarm ✓], [← Alarm
+// sound], [← Add city], [✕ Set time ✓], [← Settings]; Ringing is full screen. The sheets come last, over everything.
+import "@neoui/fonts/NeoSans-Regular.ttf";
+import "@neoui/fonts/NeoSans-Medium.ttf";
+import "@neoui/fonts/NeoSans-SemiBold.ttf";
+import "@neoui/fonts/NeoSans-Bold.ttf";
+import "@neoui/fonts/DejaVuSans.ttf";
+import {
+    Theme, Kit, Scroll, KeyboardFocus, Header, SubHeader, FormHeader, Footer, TabPages, TimePicker, DatePicker,
+    ChoiceSheet
+} from "@neoui/kit.slint";
+import { Ringing } from "@dt-shared/ringing.slint";
+import { ClockState, InfoChip, CityCard, AlarmItem, CatalogueItem, LapItem } from "state.slint";
+import { ClockPage } from "clock.slint";
+import { AlarmsPage, AlarmEditor, SoundView } from "alarms.slint";
+import { TimersPage } from "timers.slint";
+import { SettingsView, CitiesView, SetTimeView } from "views.slint";
+
+export { Theme, Kit, Scroll, KeyboardFocus, ClockState, InfoChip, CityCard, AlarmItem, CatalogueItem, LapItem }
+
+// a view over the tabs: its header, then the page
+component View inherits Rectangle {
+    background: Theme.bg;
+    TouchArea { }
+
+    VerticalLayout {
+        @children
+    }
+}
+
+export component ClockApp inherits Window {
+    default-font-family: "NeoSans";
+    background: Theme.bg;
+    property <[string]> names: ["Clock", "Alarms", "Timers"];
+    // the characters the app's Rust text uses beyond ASCII: the compiler embeds glyphs only for the string literals
+    // it finds in elements that are drawn
+    Text {
+        text: "·−’–";
+        visible: false;
+    }
+
+    // a tap no row or button takes, or a view change: the focus goes to `sink`, the field loses it, the keyboard closes
+    sink := FocusScope { }
+    TouchArea {
+        clicked => {
+            root.leave-fields();
+        }
+    }
+
+    property <string> place: ClockState.view;
+    changed place => {
+        root.leave-fields();
+    }
+
+    function leave-fields() {
+        sink.focus();
+        KeyboardFocus.open = false;
+    }
+
+    VerticalLayout {
+        Header {
+            title: root.names[ClockState.tab];
+            alt: true;
+            search: false;
+            tap-to-top: false;
+            actions: ClockState.tab == 0 ? [
+                { icon: @image-url("@neoui/icons/sys/add.svg"), label: "Add city", disabled: ClockState.cities-full },
+            ] : ClockState.tab == 1 ? [
+                { icon: @image-url("@neoui/icons/sys/add.svg"), label: "Add alarm", disabled: ClockState.alarms-full },
+            ] : [];
+            menu: ["Set time", "Settings"];
+            action(i) => {
+                ClockState.add();
+            }
+            menu-picked(i) => {
+                ClockState.menu(i);
+            }
+        }
+
+        tabs := TabPages {
+            count: 3;
+            current: ClockState.tab;
+            tab-changed(i) => {
+                ClockState.tab-chosen(i);
+            }
+            // one surface wide each, whatever their content would like
+            ClockPage {
+                width: tabs.width;
+            }
+
+            AlarmsPage {
+                width: tabs.width;
+            }
+
+            TimersPage {
+                width: tabs.width;
+            }
+        }
+
+        Footer {
+            alt: true;
+            current: ClockState.tab;
+            picked(i) => {
+                ClockState.tab-chosen(i);
+            }
+            tabs: [
+                { icon: @image-url("@neoui/icons/sys/clock.svg"), label: "Clock" },
+                { icon: @image-url("@neoui/icons/sys/alarm.svg"), label: "Alarms" },
+                {
+                    icon: @image-url("@neoui/icons/sys/timer.svg"),
+                    label: "Timers",
+                    badge: ClockState.timer-phase == 3 ? -1 : 0,
+                },
+            ];
+        }
+    }
+
+    if ClockState.view == "alarm": View {
+        FormHeader {
+            title: ClockState.edit-new ? "New alarm" : "Edit alarm";
+            alt: true;
+            cancel => {
+                ClockState.close();
+            }
+            save => {
+                ClockState.save-alarm();
+            }
+        }
+
+        AlarmEditor {
+            vertical-stretch: 1;
+        }
+    }
+    if ClockState.view == "sound": View {
+        SubHeader {
+            title: "Alarm sound";
+            alt: true;
+            search: false;
+            tap-to-top: false;
+            back => {
+                ClockState.close();
+            }
+        }
+
+        SoundView {
+            vertical-stretch: 1;
+        }
+    }
+    if ClockState.view == "cities": View {
+        SubHeader {
+            title: "Add city";
+            alt: true;
+            search: false;
+            tap-to-top: false;
+            back => {
+                ClockState.close();
+            }
+        }
+
+        CitiesView {
+            vertical-stretch: 1;
+        }
+    }
+    if ClockState.view == "set-time": View {
+        FormHeader {
+            title: "Set time";
+            alt: true;
+            cancel => {
+                ClockState.close();
+            }
+            save => {
+                ClockState.save-time();
+            }
+        }
+
+        SetTimeView {
+            vertical-stretch: 1;
+        }
+    }
+    if ClockState.view == "settings": View {
+        SubHeader {
+            title: "Settings";
+            alt: true;
+            search: false;
+            tap-to-top: false;
+            back => {
+                ClockState.close();
+            }
+        }
+
+        SettingsView {
+            vertical-stretch: 1;
+        }
+    }
+    if ClockState.view == "ringing": Ringing {
+        tint: ClockState.ring-timer ? Theme.danger : Theme.accent;
+        icon: ClockState.ring-timer ? @image-url("@neoui/icons/sys/timer.svg") : @image-url("@neoui/icons/sys/alarm.svg");
+        caption: ClockState.ring-caption;
+        hours: ClockState.ring-hours;
+        minutes: ClockState.ring-minutes;
+        lead-zero: ClockState.ring-lead-zero;
+        title: ClockState.ring-title;
+        title-tinted: ClockState.ring-timer;
+        line: ClockState.ring-line;
+        first: ClockState.ring-first;
+        first-snooze: !ClockState.ring-timer;
+        second: ClockState.ring-timer ? "Stop" : "Dismiss";
+        first-clicked => {
+            ClockState.ring-first-clicked();
+        }
+        second-clicked => {
+            ClockState.ring-second-clicked();
+        }
+    }
+
+    TimePicker {
+        title: "Alarm time";
+        open <=> ClockState.time-sheet;
+        hour <=> ClockState.sheet-hour;
+        minute <=> ClockState.sheet-minute;
+        set(h, m) => {
+            ClockState.edit-time(h, m);
+        }
+    }
+
+    ChoiceSheet {
+        title: "Snooze";
+        open <=> ClockState.snooze-sheet;
+        choices: ClockState.snooze-choices;
+        current: ClockState.snooze-current;
+        radio-left: true;
+        chosen(i) => {
+            ClockState.snooze-picked(i);
+        }
+    }
+
+    DatePicker {
+        title: "Date";
+        open <=> ClockState.date-sheet;
+        year <=> ClockState.st-year;
+        month <=> ClockState.st-month;
+        day <=> ClockState.st-day;
+        set(y, m, d) => {
+            ClockState.set-date(y, m, d);
+        }
+    }
+
+    TimePicker {
+        title: "Time";
+        open <=> ClockState.clock-sheet;
+        hour <=> ClockState.st-hour;
+        minute <=> ClockState.st-minute;
+        set(h, m) => {
+            ClockState.set-clock(h, m);
+        }
+    }
+}

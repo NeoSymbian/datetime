@@ -8,7 +8,15 @@ canvas's Clock and Calendar v2 boards (`clk2-*`, `cal2-*`, `dt2-*`); the plan is
 | Path | What | Licence |
 |---|---|---|
 | `crates/datetime-core` | The model: alarms, the timer, the stopwatch, the analog face (moved from neoui-proto in DT0) | Apache-2.0 |
-| `symbian/clock` | `NEOCLOCK.EXE` 0xE0008001 | GPL-3.0 (links Slint) |
+| `crates/pim-ics` | iCalendar on files' `neo-format-pim`: UIDs, adding and removing items, EXDATE/RECURRENCE-ID, VTIMEZONE with daylight saving | Apache-2.0 |
+| `crates/calendar-core` | Calendar's model: the RRULE subset, range queries, reminders, birthdays, to-dos, import/export, the dt-ipc records | Apache-2.0 |
+| `crates/calendar-ui` | Calendar v2's screens (Slint) and their host snapshots `snapshots/cal2-*.png`, `dt2-ring-event.png` | GPL-3.0 (links Slint) |
+| `crates/clock-ui` | Clock v2's screens (Slint) and their host snapshots `snapshots/clk2-*.png`, `dt2-ring-*.png` | GPL-3.0 (links Slint) |
+| `ui-shared` | `@dt-shared`: TimeHero, TimeCard, ProgressRing, Ringing, the segmented switch (Clock and Calendar) | GPL-3.0 |
+| `symbian/clock` | `NEOCLOCK.EXE` 0xE0008001: Clock · Alarms · Timers; the alarms and the timer through DTSRV | GPL-3.0 (links Slint) |
+| `symbian/calendar` | `NEOCAL.EXE` 0xE0008002: Month · Week · Day · To-do, events, reminders, birthdays, .ics import and share | GPL-3.0 (links Slint) |
+| `symbian/server` | `DTSRV.EXE` 0xE0008003: owns and rings every alarm, timer, event and to-do (a protocol 1.19 service of neoui's UI server; dt-ipc 1.0) | Apache-2.0 |
+| `symbian/client` | `dt-client`: DTSRV's client for the apps | Apache-2.0 |
 
 ## Build
 

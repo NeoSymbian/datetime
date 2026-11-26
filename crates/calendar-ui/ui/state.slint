@@ -1,0 +1,265 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Calendar's state: everything the screens show, set by NEOCAL (symbian/calendar) and by the host snapshots through
+// `calendar_ui::view`, and the taps back (`act(what, i)`).
+import { DayCell, MonthBar } from "@dt-shared/month-grid.slint";
+import { StripDay } from "@dt-shared/week-strip.slint";
+import { EventLine } from "@dt-shared/event-row.slint";
+
+export { DayCell, MonthBar, StripDay, EventLine }
+
+// an event on the hour grid (Week, Day): `start` and `hours` in hours from midnight; `lanes` side by side
+export struct Block {
+    i: int,
+    col: int,
+    start: float,
+    hours: float,
+    lane: int,
+    lanes: int,
+    title: string,
+    sub: string,
+    color: color,
+    past: bool,
+}
+
+// an all-day event in Week's lane (columns `col..col+span`) or Day's list
+export struct AllDay {
+    i: int,
+    col: int,
+    span: int,
+    title: string,
+    color: color,
+    cake: bool,
+}
+
+// an alarm from Clock on Day's grid (DT07)
+export struct Pin {
+    at: float,
+    text: string,
+}
+
+export struct TodoLine {
+    i: int,
+    title: string,
+    sub: string,
+    done: bool,
+    overdue: bool,
+    // 0 none, 1 medium (amber), 2 high (red)
+    flag: int,
+}
+
+export struct TodoGroup {
+    title: string,
+    danger: bool,
+    rows: [TodoLine],
+}
+
+// a search result: the title split around the match
+export struct Hit {
+    i: int,
+    // the month heading before this row ("" = none)
+    section: string,
+    date: string,
+    pre: string,
+    hit: string,
+    post: string,
+    sub: string,
+    color: color,
+    past: bool,
+}
+
+// a calendar in Calendars
+export struct CalLine {
+    name: string,
+    sub: string,
+    color: color,
+    on: bool,
+}
+
+// a row of the event or birthday view: glyph (0 place, 1 repeat, 2 bell, 3 notes, 4 to-do, 5 calendar), text, label
+export struct Detail {
+    glyph: int,
+    title: string,
+    label: string,
+}
+
+export global Cal {
+    // 0 Month, 1 Week, 2 Day, 3 To-do (the footer's tabs); 10 event, 11 event form, 12 to-do form, 13 anniversary
+    // form, 14 birthday, 15 search, 16 settings, 17 calendars, 18 import, 19 ringing
+    in-out property <int> view;
+    // the sheets over the view (each a kit layer for Back)
+    in-out property <bool> s-month;
+    in-out property <bool> s-new;
+    in-out property <bool> s-repeat;
+    in-out property <bool> s-reminder;
+    in-out property <bool> s-share;
+    in-out property <bool> s-choice;
+    in-out property <bool> s-date;
+    in-out property <bool> s-time;
+    // the To-do tab's badge (overdue to-dos)
+    in property <int> todo-badge;
+
+    // Month
+    in property <string> month-title;
+    in property <[string]> weekdays;
+    in property <[DayCell]> cells;
+    in property <[MonthBar]> bars;
+    in property <[string]> week-numbers;
+    in property <bool> busy;
+    in property <string> agenda-title;
+    in property <[EventLine]> agenda;
+    in property <string> agenda-pin;
+    in property <string> agenda-more;
+    // Go to month
+    in-out property <int> pick-year: 2026;
+    in-out property <int> pick-month: 1;
+    // New on …
+    in property <string> new-title;
+
+    // Week
+    in property <string> week-title;
+    in property <string> week-sub;
+    in property <[StripDay]> week-days;
+    in property <[AllDay]> week-all-day;
+    in property <[Block]> week-blocks;
+    // now, in hours from midnight, on column week-now-col; -1: not this week
+    in property <float> week-now: -1;
+    in property <int> week-now-col;
+    // the first hour shown
+    in property <float> week-top: 8;
+
+    // Day
+    in property <[StripDay]> day-strip;
+    in property <string> day-line;
+    in property <[AllDay]> day-all-day;
+    in property <[Block]> day-blocks;
+    in property <[Pin]> day-pins;
+    in property <float> day-now: -1;
+    in property <string> day-now-text;
+    in property <float> day-top: 8;
+    // "" shows the grid; else Nothing planned with this line
+    in property <string> day-empty;
+
+    // To-do
+    in property <int> todo-done;
+    in property <int> todo-total;
+    in property <string> todo-overdue;
+    in property <string> todo-due;
+    in property <[TodoGroup]> todo-groups;
+    in property <bool> todo-clear;
+    // "Show done · 3" under the open ones; "" = none
+    in property <string> todo-done-link;
+
+    // the event
+    in property <string> ev-cal;
+    in property <color> ev-color;
+    in property <string> ev-title;
+    in property <bool> ev-timed;
+    in property <int> ev-h0;
+    in property <int> ev-m0;
+    in property <int> ev-h1;
+    in property <int> ev-m1;
+    in property <string> ev-when;
+    in property <[Detail]> ev-rows;
+
+    // the forms (event, to-do, anniversary): the fields the user types are in-out
+    in property <string> form-title;
+    in property <bool> form-can-save: true;
+    in-out property <string> f-title;
+    in-out property <string> f-place;
+    in-out property <string> f-notes;
+    in-out property <bool> f-all-day;
+    in-out property <int> f-priority: 1;
+    in property <string> f-starts;
+    in property <string> f-ends;
+    in property <string> f-repeat;
+    in property <string> f-reminder;
+    in property <string> f-cal;
+    in property <color> f-cal-color;
+    in property <string> f-due;
+    in property <string> f-date;
+    in property <string> f-since;
+
+    // the sheets
+    in property <[string]> repeat-choices;
+    in-out property <int> repeat-current;
+    in property <string> repeat-ends;
+    in property <[string]> reminder-choices;
+    in-out property <int> reminder-current;
+    in-out property <bool> reminder-ring: true;
+    in property <string> choice-title;
+    in property <[string]> choices;
+    in-out property <int> choice-current;
+    in-out property <int> dp-year: 2026;
+    in-out property <int> dp-month: 1;
+    in-out property <int> dp-day: 1;
+    in-out property <int> tp-hour;
+    in-out property <int> tp-minute;
+    in property <string> share-text;
+    in property <string> share-title: "Share event";
+
+    // the birthday
+    in property <string> bd-initials;
+    in property <string> bd-name;
+    in property <string> bd-turns;
+    in property <string> bd-date;
+    in property <[Detail]> bd-rows;
+    in property <string> bd-note;
+
+    // search
+    in-out property <string> query;
+    in-out property <int> filter;
+    in property <[Hit]> hits;
+
+    // settings
+    in property <string> set-week-start;
+    in-out property <bool> set-week-numbers;
+    in property <string> set-open-on;
+    in property <string> set-reminder;
+    in property <string> set-length;
+    in-out property <bool> set-ring: true;
+    in-out property <bool> set-birthdays: true;
+    in property <string> set-zone;
+    in property <string> set-stored;
+
+    // calendars
+    in property <[CalLine]> cals;
+    // the calendar whose colour the card edits (-1 none)
+    in property <int> cal-edit: -1;
+    in property <[color]> swatches;
+    in property <int> swatch;
+
+    // import
+    in property <string> im-from;
+    in property <string> im-path;
+    in property <string> im-title;
+    in property <bool> im-timed;
+    in property <int> im-h0;
+    in property <int> im-m0;
+    in property <int> im-h1;
+    in property <int> im-m1;
+    in property <string> im-date;
+    in property <string> im-place;
+    in property <string> im-cal;
+    in property <color> im-cal-color;
+    in property <string> im-reminder;
+    in property <string> im-note;
+    in property <bool> im-clash;
+    in property <string> im-add: "Add event";
+
+    // ringing
+    in property <string> ring-head;
+    in property <string> ring-cal;
+    in property <color> ring-color;
+    in property <string> ring-title;
+    in property <bool> ring-timed;
+    in property <int> ring-h;
+    in property <int> ring-m;
+    in property <string> ring-sub;
+    in property <string> ring-snooze: "Snooze 5 min";
+
+    // every tap: what ("back", "tab", "today", "add", "menu", "day", "event", "todo"...) and an index
+    callback act(string, int);
+    callback date-set(int, int, int);
+    callback time-set(int, int);
+    callback searched(string);
+}

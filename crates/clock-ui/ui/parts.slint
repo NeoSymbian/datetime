@@ -1,0 +1,229 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Clock's small parts: the 52 dp action buttons, the 60 dp value rows ([icon] caption over value ›), switch rows,
+// radio rows and the section labels the boards use.
+import { Theme, Glyph, Switch } from "@neoui/kit.slint";
+
+// Start / Pause / Reset / Lap: 52 high, r 26, an optional glyph before the text
+export component BigButton inherits Rectangle {
+    in property <string> text;
+    in property <color> fill: Theme.accent;
+    in property <image> icon;
+    in property <bool> has-icon;
+    callback clicked();
+    height: 52 * Theme.dp;
+    border-radius: self.height / 2;
+    background: t.pressed ? self.fill.darker(20%) : self.fill;
+    accessible-role: button;
+    accessible-label: root.text;
+    HorizontalLayout {
+        alignment: center;
+        spacing: 8 * Theme.dp;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: root.icon;
+                size: 20 * Theme.dp;
+                colorize: white;
+            }
+        }
+        Text {
+            text: root.text;
+            color: white;
+            font-size: 16 * Theme.dp;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
+
+    t := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// "WORLD · 4 CITIES": 11.7 dp, 600, spaced, dim
+export component Label inherits Text {
+    color: Theme.text-dim;
+    font-size: 11.7 * Theme.dp;
+    font-weight: 600;
+    letter-spacing: 0.78 * Theme.dp;
+}
+
+// A hairline under a row
+component Rule inherits Rectangle {
+    height: max(1px, Theme.dp / 3);
+    background: #ffffff12;
+}
+
+// [glyph] caption over value [›] (Sound, Snooze, Date, Time): 60 dp
+export component ValueRow inherits Rectangle {
+    in property <image> icon;
+    in property <bool> has-icon: true;
+    in property <string> caption;
+    in property <string> value;
+    in property <bool> chevron: true;
+    // the caption is the main line ("Snooze" with "5 min · up to 3 times" under it: Settings)
+    in property <bool> title-first;
+    callback clicked();
+    height: 60 * Theme.dp;
+    background: t.pressed ? Theme.pressed : transparent;
+    t := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        spacing: 14 * Theme.dp;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: root.icon;
+                size: 22 * Theme.dp;
+                colorize: Theme.text-dim;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: (root.title-first ? 3 : 2) * Theme.dp;
+            horizontal-stretch: 1;
+            Text {
+                text: root.caption;
+                color: root.title-first ? Theme.text : Theme.text-dim;
+                font-size: (root.title-first ? 16 : 12.5) * Theme.dp;
+                font-weight: root.title-first ? 500 : 400;
+            }
+
+            Text {
+                text: root.value;
+                color: root.title-first ? Theme.text-dim : Theme.text;
+                font-size: (root.title-first ? 13.5 : 16) * Theme.dp;
+                overflow: elide;
+            }
+        }
+
+        if root.chevron: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: @image-url("@neoui/icons/sys/chevron_right.svg");
+                size: 18 * Theme.dp;
+                colorize: Theme.text-dim;
+            }
+        }
+    }
+
+    Rule {
+        x: (root.has-icon ? 52 : 16) * Theme.dp;
+        y: parent.height - self.height;
+        width: parent.width - self.x;
+    }
+}
+
+// title [subtitle] and a Switch: 52 dp, 60 with a subtitle
+export component SwitchRow inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    in-out property <bool> on;
+    callback toggled(bool);
+    height: (root.subtitle == "" ? 52 : 60) * Theme.dp;
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        spacing: 14 * Theme.dp;
+        VerticalLayout {
+            alignment: center;
+            spacing: 3 * Theme.dp;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: 16 * Theme.dp;
+                font-weight: 500;
+            }
+
+            if root.subtitle != "": Text {
+                text: root.subtitle;
+                color: Theme.text-dim;
+                font-size: 13.5 * Theme.dp;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Switch {
+                on <=> root.on;
+                label: root.title;
+                toggled(on) => {
+                    root.toggled(on);
+                }
+            }
+        }
+    }
+
+    Rule {
+        x: 16 * Theme.dp;
+        y: parent.height - self.height;
+        width: parent.width - self.x;
+    }
+}
+
+// a radio, a title and a note under it (Alarm sound)
+export component RadioRow inherits Rectangle {
+    in property <string> title;
+    in property <string> note;
+    in property <bool> on;
+    callback clicked();
+    height: 60 * Theme.dp;
+    background: t.pressed ? Theme.pressed : transparent;
+    accessible-role: radio-button;
+    accessible-checked: root.on;
+    accessible-label: root.title;
+    t := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        spacing: 14 * Theme.dp;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 22 * Theme.dp;
+                height: self.width;
+                border-radius: self.width / 2;
+                border-width: (root.on ? 6 : 2) * Theme.dp;
+                border-color: root.on ? Theme.accent : #5b6069;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 3 * Theme.dp;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                color: Theme.text;
+                font-size: 16 * Theme.dp;
+                font-weight: 500;
+            }
+
+            Text {
+                text: root.note;
+                color: Theme.text-dim;
+                font-size: 13.5 * Theme.dp;
+            }
+        }
+    }
+
+    Rule {
+        x: 52 * Theme.dp;
+        y: parent.height - self.height;
+        width: parent.width - self.x;
+    }
+}

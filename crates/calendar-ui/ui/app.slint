@@ -1,0 +1,269 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// NEOCAL.EXE (Calendar v2, docs datetime.md DT4–DT6): Month, Week, Day and To-do under one footer, the event and its
+// forms, birthdays and anniversaries, search, settings, Calendars, Add to Calendar (.ics) and a reminder's Ringing.
+import "@neoui/fonts/NeoSans-Regular.ttf";
+import "@neoui/fonts/NeoSans-Medium.ttf";
+import "@neoui/fonts/NeoSans-SemiBold.ttf";
+import "@neoui/fonts/NeoSans-Bold.ttf";
+import "@neoui/fonts/DejaVuSans.ttf";
+import {
+    Theme, Kit, KeyboardFocus, Header, SubHeader, FormHeader, SearchHeader, HeaderButton, Footer, Tab, Act, Toast,
+    ChoiceSheet, DatePicker, TimePicker, Alphabets
+} from "@neoui/kit.slint";
+import { Letters } from "parts.slint";
+import {
+    Cal, DayCell, MonthBar, StripDay, EventLine, Block, AllDay, Pin, TodoLine, TodoGroup, Hit, CalLine, Detail
+} from "state.slint";
+import { MonthPage, WeekPage, DayPage, TodoPage } from "tabs.slint";
+import {
+    EventPage, EventForm, TodoForm, AnniversaryForm, BirthdayPage, SearchPage, SettingsPage, CalendarsPage,
+    ImportPage, RingPage
+} from "pages.slint";
+import { MonthSheet, NewSheet, RepeatSheet, ReminderSheet, ShareSheet } from "sheets.slint";
+
+export {
+    Theme, Kit, KeyboardFocus, Cal, DayCell, MonthBar, StripDay, EventLine, Block, AllDay, Pin, TodoLine, TodoGroup,
+    Hit, CalLine, Detail
+}
+
+export component CalendarApp inherits Window {
+    default-font-family: "NeoSans";
+    background: Theme.bg;
+    property <bool> tabs: Cal.view < 4;
+    property <bool> has-header: Cal.view != 19;
+    property <length> top: root.has-header ? Theme.header-h : 0;
+    property <length> bottom: root.tabs ? Theme.footer-h : 0;
+    property <[string]> menu: ["Search", "Go to date", "Calendars", "Import .ics", "Export all (.ics)", "Settings"];
+    // every letter an event's text may hold, baked in
+    Alphabets { }
+    Letters { }
+
+    Rectangle {
+        y: root.top;
+        height: root.height - root.top - root.bottom;
+        clip: true;
+        if Cal.view == 0: MonthPage { }
+        if Cal.view == 1: WeekPage { }
+        if Cal.view == 2: DayPage { }
+        if Cal.view == 3: TodoPage { }
+        if Cal.view == 10: EventPage { }
+        if Cal.view == 11: EventForm { }
+        if Cal.view == 12: TodoForm { }
+        if Cal.view == 13: AnniversaryForm { }
+        if Cal.view == 14: BirthdayPage { }
+        if Cal.view == 15: SearchPage { }
+        if Cal.view == 16: SettingsPage { }
+        if Cal.view == 17: CalendarsPage { }
+        if Cal.view == 18: ImportPage { }
+    }
+
+    if Cal.view == 19: RingPage { }
+
+    // [Calendar · today · + · ⋮] on a tab (To-do: no today)
+    if root.tabs: Header {
+        y: 0;
+        height: Theme.header-h;
+        title: "Calendar";
+        alt: true;
+        search: false;
+        tap-to-top: false;
+        actions: Cal.view == 3
+            ? [{ icon: @image-url("@neoui/icons/sys/add.svg"), label: "New entry" }]
+            : [
+            { icon: @image-url("@neoui/icons/sys/today.svg"), label: "Go to today" },
+            { icon: @image-url("@neoui/icons/sys/add.svg"), label: "New entry" }
+        ];
+        menu: root.menu;
+        action(i) => {
+            Cal.act(Cal.view == 3 || i == 1 ? "add" : "today", 0);
+        }
+        menu-picked(i) => {
+            Cal.act("menu", i);
+        }
+    }
+    // [← · edit · share · ⋮]
+    if Cal.view == 10: SubHeader {
+        y: 0;
+        height: Theme.header-h;
+        alt: true;
+        search: false;
+        tap-to-top: false;
+        actions: [
+            { icon: @image-url("@neoui/icons/sys/edit.svg"), label: "Edit" },
+            { icon: @image-url("@neoui/icons/sys/share.svg"), label: "Share" }
+        ];
+        menu: ["Duplicate", "Delete"];
+        menu-destructive: 1;
+        back => {
+            Cal.act("back", 0);
+        }
+        action(i) => {
+            Cal.act(i == 0 ? "edit" : "share-open", 0);
+        }
+        menu-picked(i) => {
+            Cal.act(i == 0 ? "duplicate" : "delete", 0);
+        }
+    }
+    if Cal.view >= 11 && Cal.view <= 13: FormHeader {
+        y: 0;
+        height: Theme.header-h;
+        alt: true;
+        title: Cal.form-title;
+        can-save: Cal.form-can-save;
+        cancel => {
+            Cal.act("back", 0);
+        }
+        save => {
+            Cal.act("save", 0);
+        }
+    }
+    if Cal.view == 14 || Cal.view == 16 || Cal.view == 17: SubHeader {
+        y: 0;
+        height: Theme.header-h;
+        alt: true;
+        search: false;
+        tap-to-top: false;
+        title: Cal.view == 14 ? "Birthday" : Cal.view == 16 ? "Settings" : "Calendars";
+        actions: Cal.view == 17 ? [{ icon: @image-url("@neoui/icons/sys/add.svg"), label: "New calendar" }] : [];
+        menu: Cal.view == 14 ? ["Open in Contacts"] : [];
+        back => {
+            Cal.act("back", 0);
+        }
+        action(i) => {
+            Cal.act("cal-add", 0);
+        }
+        menu-picked(i) => {
+            Cal.act("contact", 0);
+        }
+    }
+    if Cal.view == 15: SearchHeader {
+        y: 0;
+        height: Theme.header-h;
+        alt: true;
+        text <=> Cal.query;
+        changed(t) => {
+            Cal.searched(t);
+        }
+        closed => {
+            Cal.act("back", 0);
+        }
+    }
+    // [← Add to Calendar / Opened from Files]
+    if Cal.view == 18: Rectangle {
+        y: 0;
+        height: Theme.header-h;
+        background: Theme.header-alt;
+        HorizontalLayout {
+            padding-right: 16 * Theme.dp;
+            spacing: 4 * Theme.dp;
+            HeaderButton {
+                icon: @image-url("@neoui/icons/sys/back.svg");
+                label: "Back";
+                tint: Theme.text;
+                clicked => {
+                    Cal.act("back", 0);
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Add to Calendar";
+                    font-size: 17 * Theme.dp;
+                    font-weight: 600;
+                    color: Theme.text;
+                }
+
+                Text {
+                    text: Cal.im-from;
+                    font-size: 12 * Theme.dp;
+                    color: Theme.text-dim;
+                }
+            }
+        }
+
+        Rectangle {
+            y: parent.height - 1px;
+            height: 1px;
+            background: Theme.header-hairline;
+        }
+    }
+
+    if root.tabs: Footer {
+        y: root.height - Theme.footer-h;
+        alt: true;
+        tabs: [
+            { icon: @image-url("@dt-shared/icons/month.svg"), label: "Month" },
+            { icon: @image-url("@dt-shared/icons/week.svg"), label: "Week" },
+            { icon: @image-url("@dt-shared/icons/day.svg"), label: "Day" },
+            { icon: @image-url("@dt-shared/icons/todo.svg"), label: "To-do", badge: Cal.todo-badge },
+        ];
+        current: Cal.view;
+        picked(i) => {
+            Cal.act("tab", i);
+        }
+    }
+
+    MonthSheet {
+        open <=> Cal.s-month;
+    }
+
+    NewSheet {
+        open <=> Cal.s-new;
+    }
+
+    RepeatSheet {
+        open <=> Cal.s-repeat;
+    }
+
+    ReminderSheet {
+        open <=> Cal.s-reminder;
+    }
+
+    ShareSheet {
+        open <=> Cal.s-share;
+    }
+
+    ChoiceSheet {
+        title: Cal.choice-title;
+        open <=> Cal.s-choice;
+        radio-left: true;
+        choices: Cal.choices;
+        current <=> Cal.choice-current;
+        chosen(i) => {
+            Cal.act("chosen", i);
+        }
+    }
+
+    DatePicker {
+        open <=> Cal.s-date;
+        year <=> Cal.dp-year;
+        month <=> Cal.dp-month;
+        day <=> Cal.dp-day;
+        set(y, m, d) => {
+            Cal.date-set(y, m, d);
+        }
+    }
+
+    TimePicker {
+        open <=> Cal.s-time;
+        hour <=> Cal.tp-hour;
+        minute <=> Cal.tp-minute;
+        set(h, m) => {
+            Cal.time-set(h, m);
+        }
+    }
+}
+
+// The host snapshots only: the app with the shell's toast (NOTE) over it, for comparing with the boards.
+export component CalendarPreview inherits CalendarApp {
+    in property <string> toast;
+    in property <string> toast-action;
+    if root.toast != "": Toast {
+        x: 12 * Theme.dp;
+        y: root.height - Theme.footer-h - 14 * Theme.dp - self.height;
+        width: root.width - 24 * Theme.dp;
+        text: root.toast;
+        action: root.toast-action;
+    }
+}

@@ -1,0 +1,133 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// TimeHero (dt2-spec-components): the band every Clock root tab starts with. The time in the display-digit glyphs
+// (DT05, the kit's BigClock), small ":07" seconds and AM/PM beside it, the date, and up to two info chips (the next
+// alarm, the next event). With `analog` the app's drawn face stands in for the digits.
+import { Theme, BigClock, Glyph } from "@neoui/kit.slint";
+
+// a chip under the date: the alarm glyph (`alarm`) or a calendar-colour dot before the text
+export struct InfoChip {
+    text: string,
+    alarm: bool,
+    dot: color,
+}
+
+// "14:30 Medicine": 28 high, r 14, #1d2025, 13 dp text
+export component HeroChip inherits Rectangle {
+    in property <InfoChip> chip;
+    height: 28 * Theme.dp;
+    width: row.preferred-width;
+    border-radius: self.height / 2;
+    background: Theme.pill;
+    row := HorizontalLayout {
+        padding-left: 10 * Theme.dp;
+        padding-right: 10 * Theme.dp;
+        spacing: 6 * Theme.dp;
+        alignment: center;
+        if root.chip.alarm: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: @image-url("@neoui/icons/sys/alarm.svg");
+                size: 16 * Theme.dp;
+                colorize: Theme.text-secondary;
+            }
+        }
+        if !root.chip.alarm: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 8 * Theme.dp;
+                height: self.width;
+                border-radius: self.width / 2;
+                background: root.chip.dot;
+            }
+        }
+        Text {
+            text: root.chip.text;
+            color: Theme.text-secondary;
+            font-size: 13 * Theme.dp;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component TimeHero inherits VerticalLayout {
+    in property <int> hours;
+    in property <int> minutes;
+    // false: "9:05" (the 12-hour clock)
+    in property <bool> lead-zero: true;
+    in property <length> digit-h: 84 * Theme.dp;
+    // ":07", or "" without seconds
+    in property <string> seconds;
+    // "AM" / "PM", or ""
+    in property <string> am-pm;
+    // "" = no date line
+    in property <string> date;
+    in property <[InfoChip]> chips;
+    // the analog face instead of the digits (190 dp, drawn by the app)
+    in property <bool> analog;
+    in property <image> face;
+    alignment: start;
+    spacing: 10 * Theme.dp;
+    padding-top: (root.analog ? 16 : 22) * Theme.dp;
+    padding-bottom: (root.analog ? 14 : 18) * Theme.dp;
+    padding-left: 16 * Theme.dp;
+    padding-right: 16 * Theme.dp;
+    if !root.analog: HorizontalLayout {
+        alignment: center;
+        spacing: 8 * Theme.dp;
+        BigClock {
+            hours: root.hours;
+            minutes: root.minutes;
+            lead-zero: root.lead-zero;
+            digit-h: root.digit-h;
+        }
+
+        if root.seconds != "": VerticalLayout {
+            alignment: end;
+            padding-bottom: 2 * Theme.dp;
+            Text {
+                text: root.seconds;
+                color: Theme.text-dim;
+                font-size: 25 * Theme.dp;
+                font-weight: 300;
+            }
+        }
+        if root.am-pm != "": VerticalLayout {
+            alignment: end;
+            padding-bottom: 4 * Theme.dp;
+            Text {
+                text: root.am-pm;
+                color: Theme.text-secondary;
+                font-size: 24 * Theme.dp;
+            }
+        }
+    }
+    if root.analog: HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 190 * Theme.dp;
+            height: self.width;
+            border-radius: self.width / 2;
+            background: Theme.card;
+            border-width: max(1px, Theme.dp / 2);
+            border-color: Theme.card-border;
+            Image {
+                source: root.face;
+                width: parent.width;
+                height: parent.height;
+            }
+        }
+    }
+    if root.date != "": Text {
+        text: root.date;
+        color: Theme.text-secondary;
+        font-size: 17 * Theme.dp;
+        horizontal-alignment: center;
+    }
+    if root.chips.length > 0: HorizontalLayout {
+        alignment: center;
+        spacing: 8 * Theme.dp;
+        for c in root.chips: HeroChip {
+            chip: c;
+        }
+    }
+}

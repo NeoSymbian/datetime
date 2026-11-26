@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "dt-client"
+description = "DTSRV's client for NEOCLOCK and NEOCAL (dt-ipc 1.0, NeoSymbian/datetime)"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+test = false
+
+[dependencies]
+e32.workspace = true
+datetime-core.workspace = true
+calendar-core.workspace = true
