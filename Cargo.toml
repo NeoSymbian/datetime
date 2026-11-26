@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# The host workspace of Clock, Calendar and DTSRV: the pure model crates (Apache-2.0) and the apps' Slint screens
+# (GPL-3.0, they link Slint), tested on the host. The EXEs are the separate symbian/ workspace (ARMv8, nightly build-std).
+[workspace]
+resolver = "3"
+members = ["crates/datetime-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+
+[workspace.dependencies]
+datetime-core = { path = "crates/datetime-core" }
+# NeoSymbian/neoui: the wire types (time zones, world cities, the face text, the settings registry) and the kit
+neoui-proto = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3081e37ea982ed65c30f6453" }
+neoui-kit = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3081e37ea982ed65c30f6453" }
+# the same Slint as neoui (one copy in the ROM, no_std)
+slint = { version = "=1.18.1", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
+png = "=0.18.1"

@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "datetime-core"
+description = "Clock and Calendar's model (alarms, timers, stopwatch, the analog face): pure, no_std, host-tested"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+neoui-proto = { workspace = true }
