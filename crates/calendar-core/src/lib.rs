@@ -232,6 +232,7 @@ impl Item {
             tz: self.tz,
             rule: self.rule.as_ref(),
             until: self.until,
+            all_day: self.all_day,
         }
     }
 

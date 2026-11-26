@@ -676,6 +676,15 @@ fn fixed_offsets_are_zones() {
 
 // --- review fixes
 
+fn one_event(lines: &str) -> Store {
+    Store::load(
+        &format!(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\n{lines}END:VEVENT\r\nEND:VCALENDAR\r\n"
+        ),
+        "",
+    )
+}
+
 #[test]
 fn editing_one_anniversary_keeps_the_copy_single() {
     let mut s = Store::load("", "");
@@ -742,4 +751,22 @@ fn a_moved_occurrence_keeps_its_own_reminder() {
         );
     }
     assert_eq!(s.reminders(from, to, &z), r);
+}
+
+#[test]
+fn nonexistent_times_are_not_counted() {
+    let s = one_event("DTSTART;TZID=Europe/Berlin:20260328T023000\r\nRRULE:FREQ=DAILY;COUNT=2\r\n");
+    let q = s.query(day(2026, 3, 27), day(2026, 4, 2), 0, &berlin(), &[]);
+    // 02:30 doesn't exist on 29 March (RFC 5545 3.3.10)
+    assert_eq!(days(&of(&q, "x")), [day(2026, 3, 28), day(2026, 3, 30)]);
+}
+
+#[test]
+fn ambiguous_times_are_the_first_instant() {
+    // 02:30 on 25 October is first 02:30 CEST = 00:30Z
+    let s = one_event(
+        "DTSTART;TZID=Europe/Berlin:20261024T023000\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEXDATE:20261025T003000Z\r\n",
+    );
+    let q = s.query(day(2026, 10, 23), day(2026, 10, 28), 0, &berlin(), &[]);
+    assert_eq!(days(&of(&q, "x")), [day(2026, 10, 24), day(2026, 10, 26)]);
 }
