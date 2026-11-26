@@ -1,0 +1,805 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// The four tabs (cal2-month, -month-busy, cal2-week, cal2-day, -day-empty, cal2-todo, -todo-done): what shows under
+// the header and above the footer.
+import { Theme, Glyph, Card, Button } from "@neoui/kit.slint";
+import { MonthGrid } from "@dt-shared/month-grid.slint";
+import { WeekStrip } from "@dt-shared/week-strip.slint";
+import { EventRow } from "@dt-shared/event-row.slint";
+import { Cal, TodoLine } from "state.slint";
+import { Caps, Divider, Number } from "parts.slint";
+
+// [title ▾ · ‹ ›]: the month or week, and its arrows
+component TitleRow inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> sub;
+    in property <bool> pick;
+    height: 48 * Theme.dp;
+    padding-left: 16 * Theme.dp;
+    padding-right: 8 * Theme.dp;
+    spacing: 4 * Theme.dp;
+    Rectangle {
+        horizontal-stretch: 0;
+        width: titles.preferred-width;
+        titles := HorizontalLayout {
+            spacing: 8 * Theme.dp;
+            Text {
+                text: root.title;
+                font-size: root.pick ? 20 * Theme.dp : Theme.font-title;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+            if root.sub != "": Text {
+                text: root.sub;
+                font-size: 13 * Theme.dp;
+                color: Theme.text-dim;
+                vertical-alignment: center;
+            }
+            if root.pick: VerticalLayout {
+                alignment: center;
+                Glyph {
+                    source: @image-url("@neoui/icons/sys/chevron_down.svg");
+                    size: 20 * Theme.dp;
+                    colorize: Theme.text-secondary;
+                }
+            }
+        }
+
+        TouchArea {
+            enabled: root.pick;
+            clicked => {
+                Cal.act("pick-month", 0);
+            }
+        }
+    }
+
+    Rectangle {
+        horizontal-stretch: 1;
+    }
+
+    for g[i] in [@image-url("@neoui/icons/sys/chevron_left.svg"), @image-url("@neoui/icons/sys/chevron_right.svg")]: Rectangle {
+        width: 48 * Theme.dp;
+        Rectangle {
+            width: 40 * Theme.dp;
+            height: 40 * Theme.dp;
+            border-radius: 20 * Theme.dp;
+            background: t.pressed ? Theme.pressed : transparent;
+        }
+
+        Glyph {
+            source: g;
+            size: 24 * Theme.dp;
+            colorize: Theme.text-secondary;
+        }
+
+        t := TouchArea {
+            clicked => {
+                Cal.act(i == 0 ? "prev" : "next", 0);
+            }
+        }
+    }
+}
+
+export component MonthPage inherits Rectangle {
+    VerticalLayout {
+        alignment: start;
+        TitleRow {
+            title: Cal.month-title;
+            pick: true;
+        }
+
+        MonthGrid {
+            weekdays: Cal.weekdays;
+            cells: Cal.cells;
+            bars: Cal.bars;
+            week-numbers: Cal.week-numbers;
+            busy: Cal.busy;
+            picked(i) => {
+                Cal.act("day", i);
+            }
+        }
+
+        // the selected day's agenda
+        HorizontalLayout {
+            padding-left: 12 * Theme.dp;
+            padding-right: 12 * Theme.dp;
+            padding-top: 10 * Theme.dp;
+            padding-bottom: 12 * Theme.dp;
+            Card {
+                VerticalLayout {
+                    padding-left: 14 * Theme.dp;
+                    padding-right: 14 * Theme.dp;
+                    padding-top: 12 * Theme.dp;
+                    padding-bottom: 12 * Theme.dp;
+                    spacing: 6 * Theme.dp;
+                    HorizontalLayout {
+                        Caps {
+                            text: Cal.agenda-title;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+
+                        Text {
+                            text: "Open day";
+                            font-size: 13 * Theme.dp;
+                            color: Theme.accent;
+                            TouchArea {
+                                clicked => {
+                                    Cal.act("open-day", 0);
+                                }
+                            }
+                        }
+                    }
+
+                    if Cal.agenda.length == 0: Text {
+                        height: 46 * Theme.dp;
+                        text: "Nothing planned";
+                        font-size: Theme.font-label;
+                        color: Theme.text-dim;
+                        vertical-alignment: center;
+                    }
+                    for e in Cal.agenda: EventRow {
+                        line: e;
+                        clicked => {
+                            Cal.act("event", e.i);
+                        }
+                    }
+                    if Cal.agenda-pin != "" || Cal.agenda-more != "": HorizontalLayout {
+                        spacing: 6 * Theme.dp;
+                        if Cal.agenda-pin != "": Glyph {
+                            source: @image-url("@neoui/icons/sys/alarm.svg");
+                            size: 16 * Theme.dp;
+                            colorize: Theme.text-dim;
+                        }
+                        Text {
+                            text: Cal.agenda-pin;
+                            font-size: Theme.font-label;
+                            color: Theme.text-dim;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: Cal.agenda-more;
+                            font-size: 13 * Theme.dp;
+                            color: Theme.text-dim;
+                            vertical-alignment: center;
+                            TouchArea {
+                                clicked => {
+                                    Cal.act("open-day", 0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component WeekPage inherits Rectangle {
+    property <length> hour: 34 * Theme.dp;
+    property <length> cw: (root.width - 44 * Theme.dp) / 7;
+    VerticalLayout {
+        TitleRow {
+            title: Cal.week-title;
+            sub: Cal.week-sub;
+        }
+
+        HorizontalLayout {
+            padding-top: 4 * Theme.dp;
+            padding-bottom: 4 * Theme.dp;
+            WeekStrip {
+                days: Cal.week-days;
+                circle: 30 * Theme.dp;
+                label-size: 15 * Theme.dp;
+                dots: false;
+                inset: 36 * Theme.dp;
+                picked(i) => {
+                    Cal.act("week-day", i);
+                }
+                moved(d) => {
+                    Cal.act(d < 0 ? "prev" : "next", 0);
+                }
+            }
+        }
+
+        // the all-day lane
+        Rectangle {
+            height: 26 * Theme.dp;
+            Text {
+                x: 4 * Theme.dp;
+                y: 6 * Theme.dp;
+                text: "all-day";
+                font-size: 10 * Theme.dp;
+                color: Theme.text-dim;
+            }
+
+            for a in Cal.week-all-day: Rectangle {
+                x: 36 * Theme.dp + a.col * root.cw + 1px;
+                y: 3 * Theme.dp;
+                width: a.span * root.cw - 2px;
+                height: 20 * Theme.dp;
+                border-radius: 5 * Theme.dp;
+                background: a.color;
+                clip: true;
+                Text {
+                    x: 4 * Theme.dp;
+                    width: parent.width - 6 * Theme.dp;
+                    text: a.title;
+                    font-size: 11 * Theme.dp;
+                    font-weight: 600;
+                    color: Theme.text;
+                    overflow: clip;
+                    vertical-alignment: center;
+                }
+
+                TouchArea {
+                    clicked => {
+                        Cal.act("event", a.i);
+                    }
+                }
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: #ffffff10;
+            }
+        }
+
+        Flickable {
+            content-height: 24 * root.hour + 8 * Theme.dp;
+            content-y: -Cal.week-top * root.hour;
+            for h in 24: Rectangle {
+                y: h * root.hour;
+                height: root.hour;
+                Rectangle {
+                    x: 0;
+                    y: 0;
+                    width: parent.width - 8 * Theme.dp;
+                    height: 1px;
+                    background: #ffffff10;
+                }
+
+                Text {
+                    x: 4 * Theme.dp;
+                    y: 2 * Theme.dp;
+                    text: (h < 10 ? "0" : "") + h;
+                    font-size: 10.5 * Theme.dp;
+                    color: Theme.text-dim;
+                }
+            }
+            for b in Cal.week-blocks: Rectangle {
+                x: 36 * Theme.dp + b.col * root.cw + 1px + b.lane * (root.cw / b.lanes);
+                y: b.start * root.hour + 1px;
+                width: root.cw / b.lanes - 2px;
+                height: max(16 * Theme.dp, b.hours * root.hour - 2px);
+                border-radius: 5 * Theme.dp;
+                background: b.color.with-alpha(0.25);
+                border-width: b.past ? 0 : 0;
+                opacity: b.past ? 0.55 : 1;
+                clip: true;
+                Rectangle {
+                    x: 0;
+                    width: 2 * Theme.dp;
+                    background: b.color;
+                }
+
+                // as wide as a word: long words are cut by the block, not broken (the board's "Worksh")
+                Text {
+                    x: 5 * Theme.dp;
+                    y: 2 * Theme.dp;
+                    width: max(parent.width - 8 * Theme.dp, 62 * Theme.dp);
+                    height: parent.height - 2 * Theme.dp;
+                    text: b.title;
+                    font-size: 10.5 * Theme.dp;
+                    font-weight: 600;
+                    color: Theme.text;
+                    wrap: word-wrap;
+                    overflow: clip;
+                    vertical-alignment: top;
+                }
+
+                TouchArea {
+                    clicked => {
+                        Cal.act("event", b.i);
+                    }
+                }
+            }
+            if Cal.week-now >= 0: Rectangle {
+                x: 32 * Theme.dp;
+                y: Cal.week-now * root.hour - 1 * Theme.dp;
+                width: parent.width - 40 * Theme.dp;
+                height: 2 * Theme.dp;
+                background: Theme.danger;
+            }
+            if Cal.week-now >= 0: Rectangle {
+                x: 29 * Theme.dp;
+                y: Cal.week-now * root.hour - 4 * Theme.dp;
+                width: 8 * Theme.dp;
+                height: 8 * Theme.dp;
+                border-radius: 4 * Theme.dp;
+                background: Theme.danger;
+            }
+        }
+    }
+}
+
+export component DayPage inherits Rectangle {
+    property <length> hour: 54 * Theme.dp;
+    VerticalLayout {
+        VerticalLayout {
+            vertical-stretch: 0;
+            padding-top: 10 * Theme.dp;
+            padding-bottom: 8 * Theme.dp;
+            spacing: 6 * Theme.dp;
+            WeekStrip {
+                days: Cal.day-strip;
+                picked(i) => {
+                    Cal.act("strip-day", i);
+                }
+                moved(d) => {
+                    Cal.act(d < 0 ? "prev" : "next", 0);
+                }
+            }
+
+            Text {
+                x: 16 * Theme.dp;
+                text: Cal.day-line;
+                font-size: 14 * Theme.dp;
+                color: Theme.text-secondary;
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: #ffffff12;
+        }
+
+        if Cal.day-all-day.length > 0: VerticalLayout {
+            vertical-stretch: 0;
+            padding-left: 12 * Theme.dp;
+            padding-right: 12 * Theme.dp;
+            padding-top: 8 * Theme.dp;
+            padding-bottom: 8 * Theme.dp;
+            spacing: 8 * Theme.dp;
+            for a in Cal.day-all-day: Rectangle {
+                height: 30 * Theme.dp;
+                border-radius: 8 * Theme.dp;
+                background: a.color.with-alpha(0.2);
+                clip: true;
+                Rectangle {
+                    x: 0;
+                    width: 3 * Theme.dp;
+                    background: a.color;
+                }
+
+                HorizontalLayout {
+                    padding-left: 10 * Theme.dp;
+                    padding-right: 10 * Theme.dp;
+                    spacing: 6 * Theme.dp;
+                    if a.cake: VerticalLayout {
+                        alignment: center;
+                        Glyph {
+                            source: @image-url("@dt-shared/icons/cake.svg");
+                            size: 16 * Theme.dp;
+                            colorize: a.color;
+                        }
+                    }
+                    Text {
+                        text: a.title;
+                        font-size: Theme.font-label;
+                        font-weight: 600;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                TouchArea {
+                    clicked => {
+                        Cal.act("event", a.i);
+                    }
+                }
+            }
+        }
+
+        if Cal.day-empty != "": VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            spacing: 14 * Theme.dp;
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 88 * Theme.dp;
+                    height: 88 * Theme.dp;
+                    border-radius: self.width / 2;
+                    background: Theme.pill;
+                    Glyph {
+                        source: @image-url("@dt-shared/icons/day.svg");
+                        size: 40 * Theme.dp;
+                        colorize: Theme.text-secondary;
+                    }
+                }
+            }
+
+            Text {
+                text: "Nothing planned";
+                font-size: 20 * Theme.dp;
+                font-weight: 600;
+                color: Theme.text;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: Cal.day-empty;
+                font-size: 14 * Theme.dp;
+                color: Theme.text-secondary;
+                horizontal-alignment: center;
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                Button {
+                    text: "Add event";
+                    has-icon: true;
+                    icon: @image-url("@neoui/icons/sys/add.svg");
+                    clicked => {
+                        Cal.act("add", 0);
+                    }
+                }
+            }
+        }
+        if Cal.day-empty == "": Flickable {
+            vertical-stretch: 1;
+            content-height: 24 * root.hour + 12 * Theme.dp;
+            content-y: -Cal.day-top * root.hour;
+            for h in 24: Rectangle {
+                y: h * root.hour;
+                height: root.hour;
+                Rectangle {
+                    x: 52 * Theme.dp;
+                    y: 0;
+                    width: parent.width - 64 * Theme.dp;
+                    height: 1px;
+                    background: #ffffff10;
+                }
+            }
+            for h in 24: Text {
+                x: 12 * Theme.dp;
+                y: h * root.hour - 7 * Theme.dp;
+                text: (h < 10 ? "0" : "") + h + ":00";
+                font-size: 12 * Theme.dp;
+                color: Theme.text-dim;
+            }
+            for b in Cal.day-blocks: Rectangle {
+                property <length> w: (parent.width - 68 * Theme.dp) / b.lanes;
+                x: 56 * Theme.dp + b.lane * self.w;
+                y: b.start * root.hour + 1px;
+                width: self.w - (b.lanes > 1 ? 4 * Theme.dp : 0);
+                height: max(20 * Theme.dp, b.hours * root.hour - 2px);
+                border-radius: 8 * Theme.dp;
+                background: b.color.with-alpha(0.22);
+                opacity: b.past ? 0.5 : 1;
+                clip: true;
+                Rectangle {
+                    x: 0;
+                    width: 4 * Theme.dp;
+                    background: b.color;
+                }
+
+                VerticalLayout {
+                    padding-left: 14 * Theme.dp;
+                    padding-right: 10 * Theme.dp;
+                    padding-top: 5 * Theme.dp;
+                    spacing: 1 * Theme.dp;
+                    alignment: start;
+                    Text {
+                        text: b.title;
+                        font-size: 14 * Theme.dp;
+                        font-weight: 600;
+                        color: Theme.text;
+                        overflow: elide;
+                    }
+
+                    if b.hours * root.hour >= 40 * Theme.dp: Text {
+                        text: b.sub;
+                        font-size: 12.5 * Theme.dp;
+                        color: Theme.text-secondary;
+                        overflow: elide;
+                    }
+                }
+
+                TouchArea {
+                    clicked => {
+                        Cal.act("event", b.i);
+                    }
+                }
+            }
+            for p in Cal.day-pins: Rectangle {
+                x: 46 * Theme.dp;
+                y: p.at * root.hour - 12 * Theme.dp;
+                width: parent.width - 58 * Theme.dp;
+                height: 24 * Theme.dp;
+                Rectangle {
+                    x: 0;
+                    y: parent.height / 2;
+                    width: parent.width - chip.width - 6 * Theme.dp;
+                    height: 1px;
+                    background: #ffffff30;
+                }
+
+                chip := Rectangle {
+                    x: parent.width - self.width;
+                    width: pin.preferred-width;
+                    border-radius: 12 * Theme.dp;
+                    background: Theme.pill;
+                    pin := HorizontalLayout {
+                        padding-left: 8 * Theme.dp;
+                        padding-right: 8 * Theme.dp;
+                        spacing: 5 * Theme.dp;
+                        VerticalLayout {
+                            alignment: center;
+                            Glyph {
+                                source: @image-url("@neoui/icons/sys/alarm.svg");
+                                size: 14 * Theme.dp;
+                                colorize: Theme.text-secondary;
+                            }
+                        }
+
+                        Text {
+                            text: p.text;
+                            font-size: 12.5 * Theme.dp;
+                            color: Theme.text-secondary;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            Cal.act("pin", 0);
+                        }
+                    }
+                }
+            }
+            if Cal.day-now >= 0: Rectangle {
+                x: 52 * Theme.dp;
+                y: Cal.day-now * root.hour - 1 * Theme.dp;
+                width: parent.width - 64 * Theme.dp;
+                height: 2 * Theme.dp;
+                background: Theme.danger;
+            }
+            if Cal.day-now >= 0: Rectangle {
+                x: 48 * Theme.dp;
+                y: Cal.day-now * root.hour - 5 * Theme.dp;
+                width: 10 * Theme.dp;
+                height: 10 * Theme.dp;
+                border-radius: 5 * Theme.dp;
+                background: Theme.danger;
+            }
+            if Cal.day-now >= 0: Rectangle {
+                x: 8 * Theme.dp;
+                y: Cal.day-now * root.hour - 8 * Theme.dp;
+                width: now.preferred-width + 4 * Theme.dp;
+                height: 16 * Theme.dp;
+                background: Theme.bg;
+                now := Text {
+                    text: Cal.day-now-text;
+                    font-size: 12 * Theme.dp;
+                    font-weight: 700;
+                    color: Theme.danger;
+                }
+            }
+        }
+    }
+}
+
+// a to-do: its circle (tap: done/undone), the title over its due line, the priority flag (60 dp)
+component TodoRow inherits Rectangle {
+    in property <TodoLine> line;
+    in property <bool> divider;
+    height: 60 * Theme.dp;
+    background: touch.pressed ? Theme.pressed : transparent;
+    touch := TouchArea {
+        clicked => {
+            Cal.act("todo", root.line.i);
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 14 * Theme.dp;
+        padding-right: 14 * Theme.dp;
+        spacing: 14 * Theme.dp;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 24 * Theme.dp;
+                height: 24 * Theme.dp;
+                border-radius: 12 * Theme.dp;
+                border-width: root.line.done ? 0 : 2 * Theme.dp;
+                border-color: root.line.overdue ? Theme.danger : #5b6069;
+                background: root.line.done ? Theme.ok : transparent;
+                if root.line.done: Glyph {
+                    source: @image-url("@neoui/icons/sys/check.svg");
+                    size: 16 * Theme.dp;
+                }
+                TouchArea {
+                    clicked => {
+                        Cal.act("toggle", root.line.i);
+                    }
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 3 * Theme.dp;
+            horizontal-stretch: 1;
+            Rectangle {
+                height: title.preferred-height;
+                title := Text {
+                    x: 0;
+                    text: root.line.title;
+                    font-size: Theme.font-body;
+                    font-weight: 500;
+                    color: root.line.done ? Theme.text-dim : Theme.text;
+                    overflow: elide;
+                }
+                // done: struck through
+                if root.line.done: Rectangle {
+                    x: 0;
+                    width: min(title.preferred-width, parent.width);
+                    height: 1.5 * Theme.dp;
+                    background: Theme.text-dim;
+                }
+            }
+
+            Text {
+                text: root.line.sub;
+                font-size: 13 * Theme.dp;
+                color: root.line.overdue ? Theme.danger : Theme.text-dim;
+                overflow: elide;
+            }
+        }
+
+        if root.line.flag > 0: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: @image-url("@dt-shared/icons/flag.svg");
+                size: 18 * Theme.dp;
+                colorize: root.line.flag > 1 ? Theme.danger : #f2c94c;
+            }
+        }
+    }
+
+    if root.divider: Divider {
+        y: parent.height - 1px;
+    }
+}
+
+export component TodoPage inherits Rectangle {
+    Flickable {
+        content-height: box.preferred-height;
+        box := VerticalLayout {
+            width: parent.width;
+            alignment: start;
+            HorizontalLayout {
+                padding-left: 16 * Theme.dp;
+                padding-right: 16 * Theme.dp;
+                padding-top: 16 * Theme.dp;
+                padding-bottom: 14 * Theme.dp;
+                VerticalLayout {
+                    spacing: 4 * Theme.dp;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: "This week";
+                        font-size: 13 * Theme.dp;
+                        color: Theme.text-dim;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 6 * Theme.dp;
+                        alignment: start;
+                        Number {
+                            value: Cal.todo-done;
+                        }
+
+                        VerticalLayout {
+                            alignment: end;
+                            padding-bottom: 4 * Theme.dp;
+                            Text {
+                                text: "of " + Cal.todo-total + " done";
+                                font-size: 18 * Theme.dp;
+                                color: Theme.text-secondary;
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 4 * Theme.dp;
+                        alignment: start;
+                        Text {
+                            text: Cal.todo-overdue;
+                            font-size: Theme.font-label;
+                            color: Theme.danger;
+                        }
+
+                        Text {
+                            text: Cal.todo-due;
+                            font-size: Theme.font-label;
+                            color: Theme.text-secondary;
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 96 * Theme.dp;
+                        height: 8 * Theme.dp;
+                        border-radius: 4 * Theme.dp;
+                        background: Theme.pill;
+                        clip: true;
+                        Rectangle {
+                            x: 0;
+                            width: Cal.todo-total > 0 ? parent.width * Cal.todo-done / Cal.todo-total : 0;
+                            background: Theme.ok;
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                padding-left: 12 * Theme.dp;
+                padding-right: 12 * Theme.dp;
+                padding-bottom: 12 * Theme.dp;
+                spacing: 8 * Theme.dp;
+                for g in Cal.todo-groups: VerticalLayout {
+                    spacing: 8 * Theme.dp;
+                    HorizontalLayout {
+                        padding-left: 4 * Theme.dp;
+                        padding-top: 4 * Theme.dp;
+                        Caps {
+                            text: g.title;
+                            color: g.danger ? Theme.danger : Theme.text-dim;
+                        }
+                    }
+
+                    Card {
+                        clip: true;
+                        VerticalLayout {
+                            for t[i] in g.rows: TodoRow {
+                                line: t;
+                                divider: i < g.rows.length - 1;
+                            }
+                        }
+                    }
+                }
+                if Cal.todo-done-link != "": HorizontalLayout {
+                    alignment: center;
+                    Button {
+                        text: Cal.todo-done-link;
+                        flat: true;
+                        clicked => {
+                            Cal.act("show-done", 0);
+                        }
+                    }
+                }
+                if Cal.todo-clear: HorizontalLayout {
+                    alignment: center;
+                    padding-top: 4 * Theme.dp;
+                    Button {
+                        text: "Clear completed";
+                        primary: false;
+                        has-icon: true;
+                        icon: @image-url("@neoui/icons/sys/delete.svg");
+                        clicked => {
+                            Cal.act("clear-done", 0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// MonthGrid (dt2-spec-components): 6 weeks × 7 days, Monday- or Sunday-first (the app orders `weekdays` and `cells`),
+// a 30 dp day circle (selected: filled accent; today when not selected: an accent ring), up to 3 dots per day in the
+// calendar colours, or (busy) up to 3 bars under the number, multi-day bars across cells, optional week numbers.
+import { Theme } from "@neoui/kit.slint";
+
+export struct DayCell {
+    label: string,
+    // outside the month (dimmer), a weekend day (dim)
+    outside: bool,
+    weekend: bool,
+    today: bool,
+    selected: bool,
+    // up to 3 calendar colours
+    dots: [color],
+}
+
+// an event over several days: on week `row`, columns `from..=to`
+export struct MonthBar {
+    row: int,
+    from: int,
+    to: int,
+    color: color,
+}
+
+export component MonthGrid inherits Rectangle {
+    in property <[string]> weekdays;
+    // 42 cells, row by row
+    in property <[DayCell]> cells;
+    in property <[MonthBar]> bars;
+    // the 6 week numbers; empty = none
+    in property <[string]> week-numbers;
+    // bars under the number instead of dots (calendar.week_numbers' companion, cal2-month-busy)
+    in property <bool> busy;
+    callback picked(int);
+    property <length> wk: root.week-numbers.length > 0 ? 22 * Theme.dp : 0;
+    property <length> cw: (root.width - 16 * Theme.dp - root.wk) / 7;
+    property <length> row-h: 42 * Theme.dp;
+    height: 22 * Theme.dp + 6 * root.row-h;
+
+    if root.week-numbers.length > 0: Text {
+        x: 8 * Theme.dp;
+        y: 0;
+        width: root.wk;
+        height: 22 * Theme.dp;
+        text: "wk";
+        font-size: 10 * Theme.dp;
+        color: #5b6069;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    for w[i] in root.weekdays: Text {
+        x: 8 * Theme.dp + root.wk + i * root.cw;
+        y: 0;
+        width: root.cw;
+        height: 22 * Theme.dp;
+        text: w;
+        font-size: 12 * Theme.dp;
+        font-weight: 600;
+        color: Theme.text-dim;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    for n[r] in root.week-numbers: Text {
+        x: 8 * Theme.dp;
+        y: 22 * Theme.dp + r * root.row-h + 4 * Theme.dp;
+        width: root.wk;
+        height: 30 * Theme.dp;
+        text: n;
+        font-size: 11 * Theme.dp;
+        color: #5b6069;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    for c[i] in root.cells: Rectangle {
+        x: 8 * Theme.dp + root.wk + Math.mod(i, 7) * root.cw;
+        y: 22 * Theme.dp + Math.floor(i / 7) * root.row-h;
+        width: root.cw;
+        height: root.row-h;
+        circle := Rectangle {
+            y: 4 * Theme.dp;
+            width: 30 * Theme.dp;
+            height: 30 * Theme.dp;
+            border-radius: self.width / 2;
+            background: c.selected ? Theme.accent : touch.pressed ? Theme.pressed : transparent;
+            border-width: c.today && !c.selected ? 1.5 * Theme.dp : 0;
+            border-color: Theme.accent;
+            Text {
+                text: c.label;
+                font-size: 15 * Theme.dp;
+                font-weight: c.today || c.selected ? 700 : 400;
+                color: c.selected ? Theme.text : c.outside ? #3a3f48 : c.weekend ? Theme.text-dim : Theme.text;
+            }
+        }
+
+        if !root.busy: HorizontalLayout {
+            y: 37 * Theme.dp;
+            height: 5 * Theme.dp;
+            alignment: center;
+            spacing: 3 * Theme.dp;
+            for d in c.dots: Rectangle {
+                width: 5 * Theme.dp;
+                height: 5 * Theme.dp;
+                border-radius: self.width / 2;
+                background: d;
+            }
+        }
+        if root.busy: VerticalLayout {
+            x: (parent.width - self.width) / 2;
+            y: 36 * Theme.dp;
+            width: 34 * Theme.dp;
+            spacing: 2 * Theme.dp;
+            for d in c.dots: Rectangle {
+                height: 3 * Theme.dp;
+                border-radius: 2 * Theme.dp;
+                background: d;
+            }
+        }
+        touch := TouchArea {
+            enabled: !c.outside;
+            clicked => {
+                root.picked(i);
+            }
+        }
+    }
+    for b in root.bars: Rectangle {
+        x: 8 * Theme.dp + root.wk + b.from * root.cw + 3 * Theme.dp;
+        y: 22 * Theme.dp + (b.row + 1) * root.row-h - 7 * Theme.dp;
+        width: (b.to - b.from + 1) * root.cw - 6 * Theme.dp;
+        height: 5 * Theme.dp;
+        border-radius: 3 * Theme.dp;
+        background: b.color;
+    }
+}

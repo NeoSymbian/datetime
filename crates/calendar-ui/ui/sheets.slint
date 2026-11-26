@@ -1,0 +1,380 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Calendar's own sheets on the kit Sheet: Go to month (cal2-month-picker), New on … (cal2-new), Repeat
+// (cal2-repeat-sheet), Reminder (cal2-reminder-sheet) and Share (cal2-share).
+import { Theme, Glyph, Sheet, Button } from "@neoui/kit.slint";
+import { Cal } from "state.slint";
+import { RadioRow, SwitchRow, Divider } from "parts.slint";
+
+component YearArrow inherits Rectangle {
+    in property <image> icon;
+    in property <int> step;
+    width: 40 * Theme.dp;
+    Glyph {
+        source: root.icon;
+        size: 22 * Theme.dp;
+        colorize: Theme.text-secondary;
+    }
+
+    TouchArea {
+        clicked => {
+            Cal.pick-year += root.step;
+        }
+    }
+}
+
+export component MonthSheet inherits Sheet {
+    title: "Go to month";
+    title-start: true;
+    VerticalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        spacing: 10 * Theme.dp;
+        HorizontalLayout {
+            alignment: center;
+            height: 48 * Theme.dp;
+            spacing: 24 * Theme.dp;
+            YearArrow {
+                icon: @image-url("@neoui/icons/sys/chevron_left.svg");
+                step: -1;
+            }
+
+            Text {
+                text: Cal.pick-year;
+                font-size: 20 * Theme.dp;
+                font-weight: 600;
+                color: Theme.text;
+                vertical-alignment: center;
+            }
+
+            YearArrow {
+                icon: @image-url("@neoui/icons/sys/chevron_right.svg");
+                step: 1;
+            }
+        }
+
+        for r in 3: HorizontalLayout {
+            spacing: 8 * Theme.dp;
+            height: 48 * Theme.dp;
+            for c in 4: Rectangle {
+                property <int> m: r * 4 + c + 1;
+                border-radius: 12 * Theme.dp;
+                background: Cal.pick-month == self.m ? Theme.accent : t.pressed ? Theme.pressed : #22262c;
+                Text {
+                    text: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][parent.m - 1];
+                    font-size: 15 * Theme.dp;
+                    font-weight: Cal.pick-month == parent.m ? 600 : 500;
+                    color: Theme.text;
+                }
+
+                t := TouchArea {
+                    clicked => {
+                        Cal.pick-month = parent.m;
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding-top: 6 * Theme.dp;
+            Rectangle {
+                horizontal-stretch: 1;
+                HorizontalLayout {
+                    alignment: start;
+                    spacing: 8 * Theme.dp;
+                    VerticalLayout {
+                        alignment: center;
+                        Glyph {
+                            source: @image-url("@neoui/icons/sys/today.svg");
+                            size: 20 * Theme.dp;
+                            colorize: Theme.accent;
+                        }
+                    }
+
+                    Text {
+                        text: "Today";
+                        font-size: Theme.font-body;
+                        font-weight: 600;
+                        color: Theme.accent;
+                        vertical-alignment: center;
+                    }
+                }
+
+                TouchArea {
+                    clicked => {
+                        root.close();
+                        Cal.act("today", 0);
+                    }
+                }
+            }
+
+            Button {
+                text: "Go";
+                width: 66 * Theme.dp;
+                clicked => {
+                    root.close();
+                    Cal.act("go-month", 0);
+                }
+            }
+        }
+    }
+}
+
+component Tile inherits Rectangle {
+    in property <image> icon;
+    in property <color> tint;
+    in property <string> title;
+    in property <string> sub;
+    callback clicked();
+    // tiles share a row equally, whatever their text
+    preferred-width: 0;
+    horizontal-stretch: 1;
+    height: 104 * Theme.dp;
+    border-radius: Theme.radius;
+    background: t.pressed ? Theme.pressed : #22262c;
+    VerticalLayout {
+        padding: 14 * Theme.dp;
+        spacing: 4 * Theme.dp;
+        alignment: start;
+        if root.tint != transparent: Rectangle {
+            width: 36 * Theme.dp;
+            height: 36 * Theme.dp;
+            border-radius: 10 * Theme.dp;
+            background: root.tint.with-alpha(0.2);
+            Glyph {
+                source: root.icon;
+                size: 22 * Theme.dp;
+                colorize: root.tint;
+            }
+        }
+        if root.tint == transparent: HorizontalLayout {
+            alignment: center;
+            Glyph {
+                source: root.icon;
+                size: 24 * Theme.dp;
+            }
+        }
+        Text {
+            text: root.title;
+            font-size: Theme.font-body;
+            font-weight: 600;
+            color: Theme.text;
+            horizontal-alignment: root.tint == transparent ? center : left;
+        }
+
+        Text {
+            text: root.sub;
+            font-size: 13 * Theme.dp;
+            color: Theme.text-dim;
+            horizontal-alignment: root.tint == transparent ? center : left;
+        }
+    }
+
+    t := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component NewSheet inherits Sheet {
+    title: Cal.new-title;
+    title-start: true;
+    VerticalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        padding-top: 6 * Theme.dp;
+        padding-bottom: 8 * Theme.dp;
+        spacing: 12 * Theme.dp;
+        HorizontalLayout {
+            spacing: 12 * Theme.dp;
+            Tile {
+                icon: @image-url("@dt-shared/icons/event.svg");
+                tint: Theme.accent;
+                title: "Event";
+                sub: "Meeting, call, trip";
+                clicked => {
+                    root.close();
+                    Cal.act("new", 0);
+                }
+            }
+
+            Tile {
+                icon: @image-url("@dt-shared/icons/day.svg");
+                tint: #8656e8;
+                title: "All-day";
+                sub: "One or more days";
+                clicked => {
+                    root.close();
+                    Cal.act("new", 1);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12 * Theme.dp;
+            Tile {
+                icon: @image-url("@dt-shared/icons/cake.svg");
+                tint: #e04e9b;
+                title: "Anniversary";
+                sub: "Every year";
+                clicked => {
+                    root.close();
+                    Cal.act("new", 2);
+                }
+            }
+
+            Tile {
+                icon: @image-url("@dt-shared/icons/todo.svg");
+                tint: Theme.ok;
+                title: "To-do";
+                sub: "With a due date";
+                clicked => {
+                    root.close();
+                    Cal.act("new", 3);
+                }
+            }
+        }
+    }
+}
+
+component Done inherits HorizontalLayout {
+    in property <string> note;
+    callback done();
+    padding-left: 16 * Theme.dp;
+    padding-right: 16 * Theme.dp;
+    padding-top: 8 * Theme.dp;
+    Text {
+        text: root.note;
+        font-size: Theme.font-label;
+        color: Theme.text-dim;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+    }
+
+    Button {
+        text: "Done";
+        width: 86 * Theme.dp;
+        clicked => {
+            root.done();
+        }
+    }
+}
+
+export component RepeatSheet inherits Sheet {
+    title: "Repeat";
+    title-start: true;
+    for c[i] in Cal.repeat-choices: RadioRow {
+        text: c;
+        on: Cal.repeat-current == i;
+        clicked => {
+            Cal.repeat-current = i;
+        }
+    }
+    Rectangle {
+        height: 1px;
+        background: #ffffff12;
+    }
+
+    Done {
+        note: Cal.repeat-ends;
+        done => {
+            root.close();
+            Cal.act("repeat-set", Cal.repeat-current);
+        }
+    }
+}
+
+export component ReminderSheet inherits Sheet {
+    title: "Reminder";
+    title-start: true;
+    for c[i] in Cal.reminder-choices: RadioRow {
+        text: c;
+        on: Cal.reminder-current == i;
+        clicked => {
+            Cal.reminder-current = i;
+        }
+    }
+    Divider {
+        inset: 16 * Theme.dp;
+    }
+
+    SwitchRow {
+        glyph: 7;
+        title: "Ring like an alarm";
+        sub: "Full screen, even when silent (DTSRV)";
+        on <=> Cal.reminder-ring;
+    }
+
+    Done {
+        done => {
+            root.close();
+            Cal.act("reminder-set", Cal.reminder-current);
+        }
+    }
+}
+
+export component ShareSheet inherits Sheet {
+    title: Cal.share-title;
+    title-start: true;
+    VerticalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        padding-top: 4 * Theme.dp;
+        padding-bottom: 8 * Theme.dp;
+        spacing: 10 * Theme.dp;
+        Rectangle {
+            border-radius: 10 * Theme.dp;
+            background: Theme.bg;
+            HorizontalLayout {
+                padding: 12 * Theme.dp;
+                Text {
+                    text: Cal.share-text;
+                    font-size: Theme.font-label;
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 10 * Theme.dp;
+            Tile {
+                icon: @image-url("@neoui/icons/sys/message.svg");
+                tint: transparent;
+                title: "Messages";
+                sub: "As text";
+                clicked => {
+                    root.close();
+                    Cal.act("share", 0);
+                }
+            }
+
+            Tile {
+                icon: @image-url("@neoui/icons/sys/folder.svg");
+                tint: transparent;
+                title: "Files";
+                sub: "Save .ics";
+                clicked => {
+                    root.close();
+                    Cal.act("share", 1);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 10 * Theme.dp;
+            Tile {
+                icon: @image-url("icons/copy.svg");
+                tint: transparent;
+                title: "Copy";
+                sub: "As text";
+                clicked => {
+                    root.close();
+                    Cal.act("share", 2);
+                }
+            }
+
+            Rectangle { }
+        }
+    }
+}

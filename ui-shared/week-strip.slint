@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// WeekStrip (dt2-spec-components): the 7 days of a week, a letter over a circle (selected: filled accent; today when
+// not selected: an accent ring) and up to 3 dots in the calendar colours. A tap picks a day, a swipe sideways moves a
+// week. Day's hero (36 dp circles, dots) and Week's header row (30 dp, no dots, `inset` for the hour column).
+import { Theme } from "@neoui/kit.slint";
+
+export struct StripDay {
+    letter: string,
+    label: string,
+    weekend: bool,
+    today: bool,
+    selected: bool,
+    dots: [color],
+}
+
+export component WeekStrip inherits Rectangle {
+    in property <[StripDay]> days;
+    in property <length> circle: 36 * Theme.dp;
+    in property <length> label-size: 16 * Theme.dp;
+    in property <bool> dots: true;
+    // room at the left (Week's hour column)
+    in property <length> inset: 8 * Theme.dp;
+    callback picked(int);
+    // -1 the previous week, 1 the next
+    callback moved(int);
+    property <length> cw: (root.width - root.inset - 8 * Theme.dp) / 7;
+    height: 15 * Theme.dp + root.circle + (root.dots ? 12 * Theme.dp : 2 * Theme.dp);
+
+    swipe := TouchArea {
+        clicked => {
+            if root.cw > 0 && Math.abs(self.mouse-x - self.pressed-x) < 20 * Theme.dp {
+                root.picked(Math.max(0, Math.min(6, Math.floor((self.pressed-x - root.inset) / root.cw))));
+            }
+        }
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.up && Math.abs(self.mouse-x - self.pressed-x) > 60 * Theme.dp {
+                root.moved(self.mouse-x < self.pressed-x ? 1 : -1);
+            }
+        }
+    }
+
+    for d[i] in root.days: VerticalLayout {
+        x: root.inset + i * root.cw;
+        y: 0;
+        width: root.cw;
+        spacing: root.dots ? 4 * Theme.dp : 2 * Theme.dp;
+        alignment: start;
+        Text {
+            text: d.letter;
+            font-size: 11.5 * Theme.dp;
+            font-weight: 600;
+            color: Theme.text-dim;
+            horizontal-alignment: center;
+        }
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: root.circle;
+                height: root.circle;
+                border-radius: self.width / 2;
+                background: d.selected ? Theme.accent : transparent;
+                border-width: d.today && !d.selected ? 1.5 * Theme.dp : 0;
+                border-color: Theme.accent;
+                Text {
+                    text: d.label;
+                    font-size: root.label-size;
+                    font-weight: d.selected || d.today ? 700 : 500;
+                    color: d.selected ? Theme.text : d.weekend ? Theme.text-dim : root.dots ? Theme.text-secondary : Theme.text;
+                }
+            }
+        }
+        if root.dots: HorizontalLayout {
+            height: 4 * Theme.dp;
+            alignment: center;
+            spacing: 3 * Theme.dp;
+            for c in d.dots: Rectangle {
+                width: 4 * Theme.dp;
+                height: 4 * Theme.dp;
+                border-radius: self.width / 2;
+                background: d.selected ? Theme.text : c;
+            }
+        }
+    }
+}

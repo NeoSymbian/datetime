@@ -1,0 +1,1066 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// The pages under a tab: the event (cal2-event-view), its form (cal2-event-edit), a to-do's (cal2-todo-edit), an
+// anniversary's (cal2-anniversary-edit), a birthday (cal2-birthday-view), search, settings, Calendars
+// (cal2-calendar-color), Add to Calendar (cal2-ics-import) and the reminder's Ringing (dt2-ring-event).
+import { Theme, Glyph, Card, Button, TextField, Avatar, Chip, ListRow, BigClock } from "@neoui/kit.slint";
+import { Cal, Detail } from "state.slint";
+import {
+    Caps, Divider, FieldLabel, FieldRow, DetailRow, SwitchRow, CalPill, RoundAction, Toggle
+} from "parts.slint";
+
+// a label and a text field
+component Field inherits VerticalLayout {
+    in property <string> label;
+    in property <string> placeholder;
+    in-out property <string> text;
+    in property <length> field-h: Theme.field-h;
+    padding-left: 16 * Theme.dp;
+    padding-right: 16 * Theme.dp;
+    padding-top: 14 * Theme.dp;
+    padding-bottom: 6 * Theme.dp;
+    spacing: 8 * Theme.dp;
+    FieldLabel {
+        text: root.label;
+    }
+
+    TextField {
+        height: root.field-h;
+        text <=> root.text;
+        placeholder: root.placeholder;
+    }
+}
+
+// "16:00 – 17:00" in the display digits, or "All day"
+component Times inherits HorizontalLayout {
+    in property <bool> timed;
+    in property <int> h0;
+    in property <int> m0;
+    in property <int> h1;
+    in property <int> m1;
+    in property <length> digit-h: 34 * Theme.dp;
+    spacing: 12 * Theme.dp;
+    alignment: start;
+    if root.timed: BigClock {
+        hours: root.h0;
+        minutes: root.m0;
+        digit-h: root.digit-h;
+    }
+    if root.timed: Text {
+        text: "–";
+        font-size: 18 * Theme.dp;
+        color: Theme.text-dim;
+        vertical-alignment: center;
+    }
+    if root.timed: BigClock {
+        hours: root.h1;
+        minutes: root.m1;
+        digit-h: root.digit-h;
+    }
+    if !root.timed: Text {
+        text: "All day";
+        font-size: 22 * Theme.dp;
+        color: Theme.text-secondary;
+    }
+}
+
+export component EventPage inherits Flickable {
+    content-height: box.preferred-height;
+    box := VerticalLayout {
+        width: parent.width;
+        alignment: start;
+        VerticalLayout {
+            padding-left: 16 * Theme.dp;
+            padding-right: 16 * Theme.dp;
+            padding-top: 18 * Theme.dp;
+            padding-bottom: 10 * Theme.dp;
+            spacing: 10 * Theme.dp;
+            HorizontalLayout {
+                alignment: start;
+                CalPill {
+                    text: Cal.ev-cal;
+                    tint: Cal.ev-color;
+                }
+            }
+
+            Text {
+                text: Cal.ev-title;
+                font-size: 28 * Theme.dp;
+                font-weight: 600;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+
+            Times {
+                timed: Cal.ev-timed;
+                h0: Cal.ev-h0;
+                m0: Cal.ev-m0;
+                h1: Cal.ev-h1;
+                m1: Cal.ev-m1;
+            }
+
+            Text {
+                text: Cal.ev-when;
+                font-size: 15 * Theme.dp;
+                color: Theme.text-secondary;
+            }
+        }
+
+        for d[i] in Cal.ev-rows: DetailRow {
+            glyph: d.glyph;
+            title: d.title;
+            label: d.label;
+            divider: i < Cal.ev-rows.length - 1;
+        }
+    }
+}
+
+export component EventForm inherits Flickable {
+    content-height: box.preferred-height;
+    box := VerticalLayout {
+        width: parent.width;
+        alignment: start;
+        Field {
+            label: "Title";
+            placeholder: "Title";
+            text <=> Cal.f-title;
+        }
+
+        SwitchRow {
+            glyph: 9;
+            title: "All day";
+            on <=> Cal.f-all-day;
+            toggled => {
+                Cal.act("all-day", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 7;
+            label: "Starts";
+            value: Cal.f-starts;
+            clicked => {
+                Cal.act("starts", 0);
+            }
+        }
+
+        FieldRow {
+            label: "Ends";
+            value: Cal.f-ends;
+            clicked => {
+                Cal.act("ends", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 1;
+            label: "Repeat";
+            value: Cal.f-repeat;
+            clicked => {
+                Cal.act("repeat", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 2;
+            label: "Reminder";
+            value: Cal.f-reminder;
+            clicked => {
+                Cal.act("reminder", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 5;
+            label: "Calendar";
+            value: Cal.f-cal;
+            dot: Cal.f-cal-color;
+            divider: false;
+            clicked => {
+                Cal.act("calendar", 0);
+            }
+        }
+
+        Field {
+            label: "Location";
+            placeholder: "Add a place";
+            text <=> Cal.f-place;
+        }
+
+        Field {
+            label: "Notes";
+            placeholder: "Add notes";
+            field-h: 72 * Theme.dp;
+            text <=> Cal.f-notes;
+        }
+
+        Rectangle {
+            height: 16 * Theme.dp;
+        }
+    }
+}
+
+export component TodoForm inherits Flickable {
+    content-height: box.preferred-height;
+    box := VerticalLayout {
+        width: parent.width;
+        alignment: start;
+        Field {
+            label: "Title";
+            placeholder: "Title";
+            text <=> Cal.f-title;
+        }
+
+        VerticalLayout {
+            padding-left: 16 * Theme.dp;
+            padding-right: 16 * Theme.dp;
+            padding-top: 10 * Theme.dp;
+            padding-bottom: 10 * Theme.dp;
+            spacing: 8 * Theme.dp;
+            FieldLabel {
+                text: "Priority";
+            }
+
+            Rectangle {
+                height: 38 * Theme.dp;
+                border-radius: self.height / 2;
+                background: Theme.pill;
+                border-width: 1px;
+                border-color: Theme.card-border;
+                HorizontalLayout {
+                    padding: 3 * Theme.dp;
+                    for p[i] in ["Low", "Normal", "High"]: Rectangle {
+                        border-radius: self.height / 2;
+                        background: Cal.f-priority == i ? #2f343b : transparent;
+                        Text {
+                            text: p;
+                            font-size: 14.5 * Theme.dp;
+                            font-weight: Cal.f-priority == i ? 600 : 500;
+                            color: Cal.f-priority == i ? Theme.text : Theme.text-secondary;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                Cal.f-priority = i;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        FieldRow {
+            glyph: 5;
+            label: "Due";
+            value: Cal.f-due;
+            clicked => {
+                Cal.act("due", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 2;
+            label: "Reminder";
+            value: Cal.f-reminder;
+            clicked => {
+                Cal.act("reminder", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 8;
+            label: "List";
+            value: Cal.f-cal;
+            clicked => {
+                Cal.act("list", 0);
+            }
+        }
+
+        Field {
+            label: "Notes";
+            placeholder: "Add notes";
+            field-h: 72 * Theme.dp;
+            text <=> Cal.f-notes;
+        }
+    }
+}
+
+export component AnniversaryForm inherits Flickable {
+    content-height: box.preferred-height;
+    box := VerticalLayout {
+        width: parent.width;
+        alignment: start;
+        Field {
+            label: "Title";
+            placeholder: "Title";
+            text <=> Cal.f-title;
+        }
+
+        FieldRow {
+            glyph: 6;
+            label: "Date";
+            value: Cal.f-date;
+            clicked => {
+                Cal.act("date", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 1;
+            label: "Since";
+            value: Cal.f-since;
+            clicked => {
+                Cal.act("since", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 2;
+            label: "Reminder";
+            value: Cal.f-reminder;
+            clicked => {
+                Cal.act("reminder", 0);
+            }
+        }
+
+        FieldRow {
+            glyph: 5;
+            label: "Calendar";
+            value: Cal.f-cal;
+            clicked => {
+                Cal.act("calendar", 0);
+            }
+        }
+
+        HorizontalLayout {
+            padding: 16 * Theme.dp;
+            Text {
+                text: "Anniversaries are all-day and yearly. Birthdays come from Contacts by themselves; edit them there.";
+                font-size: Theme.font-label;
+                color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+export component BirthdayPage inherits Flickable {
+    content-height: box.preferred-height;
+    box := VerticalLayout {
+        width: parent.width;
+        alignment: start;
+        padding-top: 24 * Theme.dp;
+        spacing: 0;
+        HorizontalLayout {
+            alignment: center;
+            Avatar {
+                initials: Cal.bd-initials;
+                tint: Theme.ok;
+                size: 96 * Theme.dp;
+            }
+        }
+
+        Text {
+            height: 46 * Theme.dp;
+            text: Cal.bd-name;
+            font-size: 24 * Theme.dp;
+            font-weight: 600;
+            color: Theme.text;
+            horizontal-alignment: center;
+            vertical-alignment: bottom;
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            spacing: 6 * Theme.dp;
+            padding-top: 6 * Theme.dp;
+            VerticalLayout {
+                alignment: center;
+                Glyph {
+                    source: @image-url("@dt-shared/icons/cake.svg");
+                    size: 18 * Theme.dp;
+                    colorize: #e04e9b;
+                }
+            }
+
+            Text {
+                text: Cal.bd-turns;
+                font-size: 16 * Theme.dp;
+                color: Theme.text-secondary;
+            }
+        }
+
+        Text {
+            height: 26 * Theme.dp;
+            text: Cal.bd-date;
+            font-size: Theme.font-label;
+            color: Theme.text-dim;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            padding-top: 14 * Theme.dp;
+            padding-bottom: 14 * Theme.dp;
+            spacing: 18 * Theme.dp;
+            RoundAction {
+                icon: @image-url("@neoui/icons/sys/call.svg");
+                text: "Call";
+                clicked => {
+                    Cal.act("call", 0);
+                }
+            }
+
+            RoundAction {
+                icon: @image-url("@neoui/icons/sys/message.svg");
+                text: "Message";
+                clicked => {
+                    Cal.act("message", 0);
+                }
+            }
+
+            RoundAction {
+                icon: @image-url("@neoui/icons/sys/contacts.svg");
+                text: "Contact";
+                clicked => {
+                    Cal.act("contact", 0);
+                }
+            }
+        }
+
+        for d[i] in Cal.bd-rows: DetailRow {
+            glyph: d.glyph;
+            title: d.title;
+            label: d.label;
+            clicked => {
+                Cal.act("bd-row", i);
+            }
+        }
+        HorizontalLayout {
+            padding: 16 * Theme.dp;
+            Text {
+                text: Cal.bd-note;
+                font-size: Theme.font-label;
+                color: Theme.text-dim;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+export component SearchPage inherits Rectangle {
+    VerticalLayout {
+        HorizontalLayout {
+            padding-left: 12 * Theme.dp;
+            padding-right: 12 * Theme.dp;
+            padding-top: 10 * Theme.dp;
+            padding-bottom: 6 * Theme.dp;
+            spacing: 8 * Theme.dp;
+            alignment: start;
+            for c[i] in ["All", "Events", "To-dos", "Anniversaries"]: Chip {
+                text: c;
+                on: Cal.filter == i;
+                toggled => {
+                    Cal.filter = i;
+                    Cal.act("filter", i);
+                }
+            }
+        }
+
+        Flickable {
+            content-height: list.preferred-height;
+            list := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+                for h in Cal.hits: VerticalLayout {
+                    if h.section != "": HorizontalLayout {
+                        padding-left: 16 * Theme.dp;
+                        padding-top: 10 * Theme.dp;
+                        padding-bottom: 6 * Theme.dp;
+                        Caps {
+                            text: h.section;
+                        }
+                    }
+                    Rectangle {
+                        height: 56 * Theme.dp;
+                        background: t.pressed ? Theme.pressed : transparent;
+                        opacity: h.past ? 0.5 : 1;
+                        t := TouchArea {
+                            clicked => {
+                                Cal.act("hit", h.i);
+                            }
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 16 * Theme.dp;
+                            padding-right: 16 * Theme.dp;
+                            spacing: 12 * Theme.dp;
+                            Text {
+                                width: 52 * Theme.dp;
+                                text: h.date;
+                                font-size: 14.5 * Theme.dp;
+                                color: Theme.text-secondary;
+                                vertical-alignment: center;
+                            }
+
+                            VerticalLayout {
+                                padding-top: 4 * Theme.dp;
+                                padding-bottom: 4 * Theme.dp;
+                                Rectangle {
+                                    width: 4 * Theme.dp;
+                                    border-radius: 2 * Theme.dp;
+                                    background: h.color;
+                                }
+                            }
+
+                            VerticalLayout {
+                                alignment: center;
+                                spacing: 2 * Theme.dp;
+                                horizontal-stretch: 1;
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Text {
+                                        text: h.pre;
+                                        font-size: Theme.font-body;
+                                        font-weight: 600;
+                                        color: Theme.text;
+                                    }
+
+                                    Text {
+                                        text: h.hit;
+                                        font-size: Theme.font-body;
+                                        font-weight: 600;
+                                        color: #8fbaff;
+                                    }
+
+                                    Text {
+                                        text: h.post;
+                                        font-size: Theme.font-body;
+                                        font-weight: 600;
+                                        color: Theme.text;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                Text {
+                                    text: h.sub;
+                                    font-size: Theme.font-label;
+                                    color: Theme.text-dim;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                    }
+                }
+                if Cal.hits.length == 0 && Cal.query != "": Text {
+                    height: 80 * Theme.dp;
+                    text: "Nothing found";
+                    font-size: Theme.font-body;
+                    color: Theme.text-dim;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+component Section inherits HorizontalLayout {
+    in property <string> text;
+    padding-left: 16 * Theme.dp;
+    padding-top: 16 * Theme.dp;
+    padding-bottom: 6 * Theme.dp;
+    Caps {
+        text: root.text;
+    }
+}
+
+export component SettingsPage inherits Flickable {
+    content-height: box.preferred-height;
+    box := VerticalLayout {
+        width: parent.width;
+        alignment: start;
+        Section {
+            text: "VIEW";
+        }
+
+        ListRow {
+            title: "Week starts on";
+            subtitle: Cal.set-week-start;
+            chevron: true;
+            clicked => {
+                Cal.act("set-week-start", 0);
+            }
+        }
+
+        ListRow {
+            title: "Show week numbers";
+            has-switch: true;
+            switch-on <=> Cal.set-week-numbers;
+            switch-toggled(on) => {
+                Cal.act("set-week-numbers", on ? 1 : 0);
+            }
+        }
+
+        ListRow {
+            title: "Open on";
+            subtitle: Cal.set-open-on;
+            chevron: true;
+            divider: false;
+            clicked => {
+                Cal.act("set-open-on", 0);
+            }
+        }
+
+        Section {
+            text: "NEW EVENTS";
+        }
+
+        ListRow {
+            title: "Default reminder";
+            subtitle: Cal.set-reminder;
+            chevron: true;
+            clicked => {
+                Cal.act("set-reminder", 0);
+            }
+        }
+
+        ListRow {
+            title: "Default length";
+            subtitle: Cal.set-length;
+            chevron: true;
+            clicked => {
+                Cal.act("set-length", 0);
+            }
+        }
+
+        ListRow {
+            title: "Reminders ring like alarms";
+            has-switch: true;
+            divider: false;
+            switch-on <=> Cal.set-ring;
+            switch-toggled(on) => {
+                Cal.act("set-ring", on ? 1 : 0);
+            }
+        }
+
+        Section {
+            text: "DATA";
+        }
+
+        ListRow {
+            title: "Birthdays from Contacts";
+            has-switch: true;
+            switch-on <=> Cal.set-birthdays;
+            switch-toggled(on) => {
+                Cal.act("set-birthdays", on ? 1 : 0);
+            }
+        }
+
+        ListRow {
+            title: "Time zone";
+            subtitle: Cal.set-zone;
+            chevron: true;
+            clicked => {
+                Cal.act("set-zone", 0);
+            }
+        }
+
+        ListRow {
+            title: "Stored in";
+            subtitle: Cal.set-stored;
+            divider: false;
+        }
+    }
+}
+
+export component CalendarsPage inherits Flickable {
+    content-height: box.preferred-height;
+    box := VerticalLayout {
+        width: parent.width;
+        alignment: start;
+        for c[i] in Cal.cals: Rectangle {
+            height: 62 * Theme.dp;
+            background: t.pressed ? Theme.pressed : Cal.cal-edit == i ? Theme.selected : transparent;
+            t := TouchArea {
+                clicked => {
+                    Cal.act("cal", i);
+                }
+            }
+
+            HorizontalLayout {
+                padding-left: 16 * Theme.dp;
+                padding-right: 16 * Theme.dp;
+                spacing: 16 * Theme.dp;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 12 * Theme.dp;
+                        height: 12 * Theme.dp;
+                        border-radius: 6 * Theme.dp;
+                        background: c.color;
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2 * Theme.dp;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: c.name;
+                        font-size: Theme.font-body;
+                        font-weight: 600;
+                        color: Theme.text;
+                        overflow: elide;
+                    }
+
+                    Text {
+                        text: c.sub;
+                        font-size: Theme.font-label;
+                        color: Theme.text-dim;
+                        overflow: elide;
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    Toggle {
+                        on: c.on;
+                        TouchArea {
+                            clicked => {
+                                Cal.act("cal-shown", i);
+                            }
+                        }
+                    }
+                }
+            }
+
+            Divider {
+                y: parent.height - 1px;
+                inset: 44 * Theme.dp;
+            }
+        }
+        if Cal.cal-edit >= 0: HorizontalLayout {
+            padding: 12 * Theme.dp;
+            Card {
+                VerticalLayout {
+                    padding: 14 * Theme.dp;
+                    spacing: 12 * Theme.dp;
+                    Caps {
+                        text: ("Colour · " + Cal.cals[Cal.cal-edit].name).to-uppercase();
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8 * Theme.dp;
+                        alignment: space-between;
+                        for s[i] in Cal.swatches: Rectangle {
+                            width: 31 * Theme.dp;
+                            height: 31 * Theme.dp;
+                            border-radius: self.width / 2;
+                            background: s;
+                            border-width: Cal.swatch == i ? 2.5 * Theme.dp : 0;
+                            border-color: Theme.text;
+                            if Cal.swatch == i: Rectangle {
+                                width: parent.width - 5 * Theme.dp;
+                                height: self.width;
+                                border-radius: self.width / 2;
+                                border-width: 2 * Theme.dp;
+                                border-color: Theme.card;
+                            }
+                            TouchArea {
+                                clicked => {
+                                    Cal.act("swatch", i);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component ImportPage inherits Rectangle {
+    VerticalLayout {
+        Flickable {
+            content-height: box.preferred-height;
+            box := VerticalLayout {
+                width: parent.width;
+                alignment: start;
+                HorizontalLayout {
+                    padding: 12 * Theme.dp;
+                    padding-bottom: 6 * Theme.dp;
+                    Card {
+                        VerticalLayout {
+                            padding: 16 * Theme.dp;
+                            spacing: 10 * Theme.dp;
+                            HorizontalLayout {
+                                spacing: 10 * Theme.dp;
+                                Glyph {
+                                    source: @image-url("@neoui/icons/sys/file.svg");
+                                    size: 20 * Theme.dp;
+                                    colorize: Theme.text-dim;
+                                }
+
+                                Text {
+                                    text: Cal.im-path;
+                                    font-size: 13.5 * Theme.dp;
+                                    color: Theme.text-secondary;
+                                    overflow: elide;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Text {
+                                text: Cal.im-title;
+                                font-size: 22 * Theme.dp;
+                                font-weight: 600;
+                                color: Theme.text;
+                                wrap: word-wrap;
+                            }
+
+                            Times {
+                                timed: Cal.im-timed;
+                                h0: Cal.im-h0;
+                                m0: Cal.im-m0;
+                                h1: Cal.im-h1;
+                                m1: Cal.im-m1;
+                                digit-h: 26 * Theme.dp;
+                            }
+
+                            Text {
+                                text: Cal.im-date;
+                                font-size: 15 * Theme.dp;
+                                color: Theme.text-secondary;
+                            }
+
+                            Text {
+                                text: Cal.im-place;
+                                font-size: Theme.font-label;
+                                color: Theme.text-dim;
+                                overflow: elide;
+                            }
+                        }
+                    }
+                }
+
+                FieldRow {
+                    glyph: 5;
+                    label: "Add to";
+                    value: Cal.im-cal;
+                    dot: Cal.im-cal-color;
+                    clicked => {
+                        Cal.act("calendar", 0);
+                    }
+                }
+
+                FieldRow {
+                    glyph: 2;
+                    label: "Reminder";
+                    value: Cal.im-reminder;
+                    chevron: false;
+                }
+
+                HorizontalLayout {
+                    padding-left: 16 * Theme.dp;
+                    padding-right: 16 * Theme.dp;
+                    padding-top: 14 * Theme.dp;
+                    spacing: 12 * Theme.dp;
+                    Glyph {
+                        source: @image-url("@neoui/icons/sys/info.svg");
+                        size: 18 * Theme.dp;
+                        colorize: Cal.im-clash ? Theme.warn : Theme.ok;
+                    }
+
+                    Text {
+                        text: Cal.im-note;
+                        font-size: 14 * Theme.dp;
+                        color: Theme.text-secondary;
+                        wrap: word-wrap;
+                        horizontal-stretch: 1;
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding: 12 * Theme.dp;
+            spacing: 12 * Theme.dp;
+            Button {
+                height: 48 * Theme.dp;
+                text: "Cancel";
+                primary: false;
+                clicked => {
+                    Cal.act("back", 0);
+                }
+            }
+
+            Button {
+                height: 48 * Theme.dp;
+                text: Cal.im-add;
+                clicked => {
+                    Cal.act("import", 0);
+                }
+            }
+        }
+    }
+}
+
+// a full-width 60 dp pill (Snooze, Dismiss)
+component Pill inherits Rectangle {
+    in property <string> text;
+    in property <color> fill;
+    in property <bool> snooze;
+    callback clicked();
+    height: 60 * Theme.dp;
+    border-radius: self.height / 2;
+    background: t.pressed ? self.fill.darker(20%) : self.fill;
+    HorizontalLayout {
+        alignment: center;
+        spacing: 8 * Theme.dp;
+        if root.snooze: VerticalLayout {
+            alignment: center;
+            Glyph {
+                source: @image-url("icons/snooze.svg");
+                size: 20 * Theme.dp;
+            }
+        }
+        Text {
+            text: root.text;
+            font-size: Theme.font-body;
+            font-weight: 600;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+    }
+
+    t := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+export component RingPage inherits Rectangle {
+    background: Theme.bg;
+    VerticalLayout {
+        padding-left: 24 * Theme.dp;
+        padding-right: 24 * Theme.dp;
+        padding-bottom: 26 * Theme.dp;
+        VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            spacing: 14 * Theme.dp;
+            HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 184 * Theme.dp;
+                    height: 184 * Theme.dp;
+                    for r[i] in [184, 140]: Rectangle {
+                        width: r * Theme.dp;
+                        height: r * Theme.dp;
+                        border-radius: self.width / 2;
+                        border-width: 1px;
+                        border-color: Cal.ring-color.with-alpha(i == 0 ? 0.1 : 0.2);
+                    }
+                    Rectangle {
+                        width: 96 * Theme.dp;
+                        height: 96 * Theme.dp;
+                        border-radius: self.width / 2;
+                        background: Cal.ring-color.with-alpha(0.15);
+                        border-width: 1px;
+                        border-color: Cal.ring-color.with-alpha(0.4);
+                        Glyph {
+                            source: @image-url("@dt-shared/icons/event.svg");
+                            size: 44 * Theme.dp;
+                            colorize: Cal.ring-color;
+                        }
+                    }
+                }
+            }
+
+            Caps {
+                text: Cal.ring-head;
+                horizontal-alignment: center;
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 8 * Theme.dp;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 10 * Theme.dp;
+                        height: 10 * Theme.dp;
+                        border-radius: 5 * Theme.dp;
+                        background: Cal.ring-color;
+                    }
+                }
+
+                Text {
+                    text: Cal.ring-cal;
+                    font-size: 15 * Theme.dp;
+                    color: Theme.text-secondary;
+                }
+            }
+
+            Text {
+                text: Cal.ring-title;
+                font-size: 30 * Theme.dp;
+                font-weight: 600;
+                color: Theme.text;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                if Cal.ring-timed: BigClock {
+                    hours: Cal.ring-h;
+                    minutes: Cal.ring-m;
+                    digit-h: 56 * Theme.dp;
+                }
+                if !Cal.ring-timed: Text {
+                    text: "All day";
+                    font-size: 30 * Theme.dp;
+                    color: Theme.text-secondary;
+                }
+            }
+
+            Text {
+                text: Cal.ring-sub;
+                font-size: 15 * Theme.dp;
+                color: Theme.text-dim;
+                horizontal-alignment: center;
+            }
+        }
+
+        VerticalLayout {
+            spacing: 10 * Theme.dp;
+            Pill {
+                text: Cal.ring-snooze;
+                fill: Theme.dialog-button;
+                snooze: true;
+                clicked => {
+                    Cal.act("snooze", 0);
+                }
+            }
+
+            Pill {
+                text: "Dismiss";
+                fill: Theme.accent;
+                clicked => {
+                    Cal.act("dismiss", 0);
+                }
+            }
+
+            Button {
+                text: "Open in Calendar";
+                flat: true;
+                clicked => {
+                    Cal.act("ring-open", 0);
+                }
+            }
+        }
+    }
+}
