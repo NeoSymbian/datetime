@@ -35,7 +35,8 @@ pub(crate) fn weekday(s: &str) -> Option<usize> {
 
 impl Rule {
     /// The rule `s` for an event starting on `start`, or `None` outside the subset. BYMONTH and BYMONTHDAY are taken
-    /// when they only repeat the start's own month and day (as many writers add them).
+    /// when they only repeat the start's own month and day (as many writers add them): BYMONTHDAY for MONTHLY, BYMONTH
+    /// (and with it BYMONTHDAY) for YEARLY. Elsewhere they limit or expand the rule, which the subset doesn't.
     pub fn parse(s: &str, start: Date) -> Option<Rule> {
         let mut r = Rule {
             freq: Freq::Daily,
@@ -45,6 +46,7 @@ impl Rule {
             days: 0,
         };
         let mut freq = None;
+        let (mut by_monthday, mut by_month) = (false, false);
         for part in s.trim().split(';').filter(|p| !p.is_empty()) {
             let (k, v) = part.split_once('=')?;
             match k.to_ascii_uppercase().as_str() {
@@ -66,13 +68,19 @@ impl Rule {
                         r.days |= 1 << weekday(d)?;
                     }
                 }
-                "BYMONTHDAY" if v.parse() == Ok(start.day) => {}
-                "BYMONTH" if v.parse() == Ok(start.month) => {}
+                "BYMONTHDAY" if v.parse() == Ok(start.day) => by_monthday = true,
+                "BYMONTH" if v.parse() == Ok(start.month) => by_month = true,
                 _ => return None,
             }
         }
         r.freq = freq?;
-        (r.days == 0 || r.freq == Freq::Weekly).then_some(r)
+        let by_ok = match r.freq {
+            Freq::Daily | Freq::Weekly => !by_monthday && !by_month,
+            Freq::Monthly => !by_month,
+            // YEARLY;BYMONTHDAY alone is that day of every month
+            Freq::Yearly => by_month || !by_monthday,
+        };
+        (by_ok && (r.days == 0 || r.freq == Freq::Weekly)).then_some(r)
     }
 
     /// The RRULE value.

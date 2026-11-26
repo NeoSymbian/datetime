@@ -787,3 +787,12 @@ fn zoned_end_is_elapsed_time_across_a_change() {
         at(2026, 3, 29, 3, 30)
     );
 }
+
+#[test]
+fn rules_with_by_filters_they_dont_repeat_are_outside_the_subset() {
+    let s = one_event("DTSTART:20260101T090000\r\nRRULE:FREQ=DAILY;BYMONTHDAY=1;COUNT=2\r\n");
+    let z = berlin();
+    let q = s.query(day(2026, 1, 1), day(2026, 2, 28), 0, &z, &[]);
+    assert_eq!(days(&of(&q, "x")), [day(2026, 1, 1)]);
+    assert_eq!(s.get("x", None, &z).expect("get").repeat, Repeat::Other);
+}
