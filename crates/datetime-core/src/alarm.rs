@@ -240,9 +240,17 @@ impl Alarms {
     /// # Errors
     /// [`Full`] when there is no room for the snooze alarm.
     pub fn snooze(&mut self, id: u16, now: Minute) -> Result<u16, Full> {
+        self.snooze_for(id, now, SNOOZE_MIN)
+    }
+
+    /// [`Self::snooze`] for `minutes` (the `clock.snooze` setting).
+    ///
+    /// # Errors
+    /// [`Full`] when there is no room for the snooze alarm.
+    pub fn snooze_for(&mut self, id: u16, now: Minute, minutes: u16) -> Result<u16, Full> {
         let label = self.get(id).map(|a| a.label.clone()).unwrap_or_default();
         self.dismissed(id);
-        let at = now.plus(u32::from(SNOOZE_MIN));
+        let at = now.plus(u32::from(minutes));
         self.add(at.hour, at.minute, Weekdays::ONCE, &label)
     }
 
@@ -302,16 +310,20 @@ impl Alarms {
         }
         r.end()?;
         let mut alarms = Self { list, next_id };
+        // id 0 means "a new alarm" to DTSRV's ALARM_PUT: an older blob's alarm 0 gets a fresh id
+        while let Some(i) = alarms.list.iter().position(|a| a.id == 0) {
+            alarms.list[i].id = alarms.fresh_id();
+        }
         alarms.sort();
         Ok(alarms)
     }
 
     fn fresh_id(&mut self) -> u16 {
-        // ids are never reused while the alarm with that id exists
+        // ids are never reused while the alarm with that id exists, and never 0 (see `decode`)
         loop {
             let id = self.next_id;
             self.next_id = self.next_id.wrapping_add(1);
-            if self.get(id).is_none() {
+            if id != 0 && self.get(id).is_none() {
                 return id;
             }
         }
@@ -463,6 +475,12 @@ mod tests {
         let mut back = Alarms::decode(&b).expect("valid");
         let new = back.add(1, 0, Weekdays::ONCE, "").expect("room");
         assert!(a.as_slice().iter().all(|x| x.id != new));
+        // an older blob's alarm 0 (ids started at 0 before DTSRV) comes back with an id of its own
+        let mut old = b.clone();
+        old[1..3].copy_from_slice(&0u16.to_le_bytes());
+        old[4..6].copy_from_slice(&0u16.to_le_bytes());
+        let back = Alarms::decode(&old).expect("valid");
+        assert!(back.as_slice().iter().all(|x| x.id != 0));
     }
 
     #[test]

@@ -4,7 +4,7 @@
 # 2026-11-06). The pins must match neoui's: one e32 (it defines the global allocator) and one Slint in the ROM.
 [workspace]
 resolver = "3"
-members = ["clock", "server"]
+members = ["clock", "client", "server"]
 
 [workspace.dependencies]
 e32 = { git = "https://github.com/NeoSymbian/e32-rs", rev = "8084b94f9e8264384113e7ea6fa52adf70944cc5", features = ["critical-section"] }
@@ -13,6 +13,7 @@ neoapp = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3
 neoui-kit = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3081e37ea982ed65c30f6453" }
 slint = { version = "=1.18.1", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
 datetime-core = { path = "../crates/datetime-core" }
+dt-client = { path = "client" }
 pim-ics = { path = "../crates/pim-ics" }
 calendar-core = { path = "../crates/calendar-core" }
 

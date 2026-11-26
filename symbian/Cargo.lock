@@ -833,6 +833,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dt-client"
+version = "0.1.0"
+dependencies = [
+ "datetime-core",
+ "e32",
+]
+
+[[package]]
 name = "dtsrv"
 version = "0.1.0"
 dependencies = [

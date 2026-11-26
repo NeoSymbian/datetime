@@ -9,11 +9,19 @@
 //! | [`analog`] | the analog face drawn into pixels (dial once, hands each second) |
 //! | [`timer`] | the countdown timer's state machine |
 //! | [`stopwatch`] | the stopwatch and its laps |
+//! | [`plan`] | DTSRV's planner: what rings now and next |
+//! | [`ipc`] | dt-ipc 1.0, DTSRV's client-server contract |
+//! | [`next`] | the `dtsrv.next` setting: the next alarm and event, for the shell |
+//! | [`pages`] | Clock's and Calendar's page numbers for `OPEN` |
 #![no_std]
 
 extern crate alloc;
 
 pub mod alarm;
 pub mod analog;
+pub mod ipc;
+pub mod next;
+pub mod pages;
+pub mod plan;
 pub mod stopwatch;
 pub mod timer;

@@ -91,6 +91,24 @@ impl Timer {
         }
     }
 
+    /// Adds `delta_ms` (negative takes away) to the time left, whatever the phase: a done timer runs again for it
+    /// (the ring's "+1 min"); a running one can't end before `now_ms`.
+    pub fn add(&mut self, delta_ms: i64, now_ms: i64) {
+        self.phase = match self.phase {
+            Phase::Idle => return self.adjust(delta_ms),
+            Phase::Running { ends_ms } => Phase::Running {
+                ends_ms: (ends_ms + delta_ms).max(now_ms),
+            },
+            Phase::Paused { left_ms } => Phase::Paused {
+                left_ms: clamp_ms(i64::from(left_ms) + delta_ms),
+            },
+            Phase::Done if delta_ms > 0 => Phase::Running {
+                ends_ms: now_ms + delta_ms,
+            },
+            Phase::Done => Phase::Done,
+        };
+    }
+
     /// Back to idle with the same duration.
     pub fn reset(&mut self) {
         self.phase = Phase::Idle;
@@ -185,6 +203,27 @@ mod tests {
         assert!(!t.tick(T0 + 200_000), "done once");
         t.reset();
         assert_eq!((t.phase, t.left_ms(T0)), (Phase::Idle, 60_000));
+    }
+
+    #[test]
+    fn adding_time_works_in_every_phase() {
+        let mut t = Timer::default();
+        t.add(60_000, T0);
+        assert_eq!(t.set_ms, DEFAULT_MS + 60_000);
+        t.start(T0);
+        t.add(-10 * 60_000, T0 + 1_000);
+        assert_eq!(
+            t.phase,
+            Phase::Running {
+                ends_ms: T0 + 1_000
+            }
+        );
+        assert!(t.tick(T0 + 1_000));
+        t.add(60_000, T0 + 5_000);
+        assert_eq!(t.left_ms(T0 + 5_000), 60_000, "+1 min on a done timer");
+        t.pause(T0 + 35_000);
+        t.add(15_000, T0 + 40_000);
+        assert_eq!(t.phase, Phase::Paused { left_ms: 45_000 });
     }
 
     #[test]
