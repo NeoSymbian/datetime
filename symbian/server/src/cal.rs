@@ -29,11 +29,11 @@ impl Zone for Local {
     }
 }
 
-/// The stores from their files. A first run (no `calendar.ics`) gets "Personal" and writes both; an unreadable file
-/// is kept as `x.bad` and the store starts empty.
-pub fn load(seed: u64) -> Store {
-    let (events, first) = text(store::EVENTS);
-    let (todos, _) = text(store::TODOS);
+/// The stores from their files. A first run (no `calendar.ics`) gets "Personal" and writes both; a file that isn't
+/// an iCalendar is kept as `x.bad` and starts empty. `Err` when a file can't be read now (tried again later).
+pub fn load(seed: u64) -> Result<Store, i32> {
+    let (events, first) = text(store::EVENTS)?;
+    let (todos, _) = text(store::TODOS)?;
     let mut s = Store::load(&events, &todos);
     s.seed = seed;
     if events.trim().is_empty() {
@@ -47,7 +47,7 @@ pub fn load(seed: u64) -> Store {
         s.calendars().len(),
         s.todos(&0).len()
     );
-    s
+    Ok(s)
 }
 
 /// A store emptied as `which` says (Settings → Clear data), keeping the other.
@@ -79,10 +79,10 @@ pub fn save(s: &Store, events: bool, todos: bool) -> Result<(), i32> {
 }
 
 /// A store file's text, and whether there was none (a first run). Text that isn't an iCalendar (not UTF-8, or no
-/// VCALENDAR in it) or can't be read is kept aside and reads as empty.
-fn text(path: &str) -> (String, bool) {
-    match store::read(path) {
-        Ok(Some(b)) => match String::from_utf8(b) {
+/// VCALENDAR in it) is kept aside and reads as empty.
+fn text(path: &str) -> Result<(String, bool), i32> {
+    Ok(match store::read(path)? {
+        Some(b) => match String::from_utf8(b) {
             Ok(t) if t.trim().is_empty() || has_calendar(&t) => (t, false),
             _ => {
                 dprintln!("dtsrv: {} is corrupt: starting empty", path);
@@ -90,13 +90,8 @@ fn text(path: &str) -> (String, bool) {
                 (String::new(), false)
             }
         },
-        Ok(None) => (String::new(), true),
-        Err(e) => {
-            dprintln!("dtsrv: {} not read ({}): starting empty", path, e);
-            store::keep_bad(path);
-            (String::new(), false)
-        }
-    }
+        None => (String::new(), true),
+    })
 }
 
 fn has_calendar(t: &str) -> bool {

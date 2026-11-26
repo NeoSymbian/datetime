@@ -18,7 +18,7 @@ use datetime_core::alarm::{Alarms, format_hm};
 use datetime_core::ipc::{self, CalendarInfo, RingInfo, action, mask, op, ring};
 use datetime_core::next::Next;
 use datetime_core::pages;
-use datetime_core::plan::{self, minute_of_week};
+use datetime_core::plan::{self, At, Rung, boot_since, minute_of_week};
 use datetime_core::timer::{Phase, Timer, format_left};
 use e32::dprintln;
 use e32::server::{Message, Service};
@@ -41,6 +41,9 @@ const QUERY_DAYS: i32 = 1000;
 /// The most calendars: EVENT_QUERY's hidden mask has 32 bits.
 const CALENDARS_MAX: usize = 32;
 const KERR_TOO_BIG: i32 = -40;
+const KERR_NOT_READY: i32 = -18;
+/// How often a store that couldn't be read at start is tried again (ms).
+const RETRY_MS: i64 = 10_000;
 
 /// UTC now in Unix ms, and the kernel's UTC offset in seconds (the shell sets it for the zone and summer time).
 fn clock() -> (i64, i32) {
@@ -71,13 +74,15 @@ pub struct Dt {
     ui: Ui,
     alarms: Alarms,
     timer: Timer,
-    /// the rings going on (ring ids)
-    ringing: Vec<u32>,
-    /// alarms Snooze made: (id, snoozes left after it); they go when dismissed
-    snoozed: Vec<(u16, u8)>,
+    /// what rang, the rings going on and the alarms Snooze made (`rings.dat`)
+    rung: Rung,
+    /// the stores not read yet (mask bits; the calendar is EVENTS | TODOS, `rings.dat` RINGS): their writes wait
+    pending: u32,
+    /// when to try them again (UTC ms)
+    retry_at: i64,
     settings: Settings,
-    /// the last plan's now (Unix seconds): things due after it ring
-    since: i64,
+    /// the last plan's now: things due after it ring
+    since: At,
     /// the `dtsrv.next` last written
     published: Vec<u8>,
     /// the running timer's card text as last posted ("" = no card)
@@ -108,34 +113,31 @@ impl Dt {
                 dprintln!("dtsrv: settings watch {} refused ({})", prefix, e);
             }
         }
-        let alarms = load(
-            &ui,
-            store::ALARMS,
-            "clock.alarms",
-            Alarms::decode,
-            Alarms::encode,
-        );
-        let timer = load(
-            &ui,
-            store::TIMERS,
-            "clock.timer",
-            Timer::decode,
-            Timer::encode,
-        );
-        dprintln!(
-            "dtsrv: start: {} alarms, timer {:?}",
-            alarms.as_slice().len(),
-            timer.phase
-        );
         let (now_ms, offset) = clock();
+        let mut pending = 0;
+        let alarms = ready(load_alarms(&ui), mask::ALARMS, &mut pending);
+        let timer = ready(load_timer(&ui), mask::TIMERS, &mut pending);
+        let rung = ready(load_rung(), mask::RINGS, &mut pending);
         // the seed only keeps new uids apart across restarts
-        let events = cal::load(now_ms as u64);
+        let events = cal::load(now_ms as u64).unwrap_or_else(|e| {
+            dprintln!("dtsrv: the calendar not read ({}): tried again later", e);
+            pending |= mask::EVENTS | mask::TODOS;
+            Store::load("", "")
+        });
+        dprintln!(
+            "dtsrv: start: {} alarms, timer {:?}, {} rings, unread {:#x}",
+            alarms.as_slice().len(),
+            timer.phase,
+            rung.ringing.len(),
+            pending
+        );
         let mut d = Self {
             ui,
             alarms,
             timer,
-            ringing: Vec::new(),
-            snoozed: Vec::new(),
+            rung,
+            pending,
+            retry_at: now_ms + RETRY_MS,
             settings: Settings {
                 snooze_min: 5,
                 snooze_count: 3,
@@ -144,7 +146,10 @@ impl Dt {
                 birthdays: true,
                 city: None,
             },
-            since: now_ms.div_euclid(1000),
+            since: At {
+                ms: boot_since(now_ms),
+                offset,
+            },
             published: Vec::new(),
             chrono: String::new(),
             watchers: Vec::new(),
@@ -158,7 +163,69 @@ impl Dt {
             cal_until: i64::MIN,
         };
         d.read_settings();
+        d.repost(now_ms);
         d
+    }
+
+    /// The rings a restart cut off (and a timer that ended unacknowledged) ring again; a reminder's is forgotten.
+    fn repost(&mut self, now_ms: i64) {
+        let old = core::mem::take(&mut self.rung.ringing);
+        let gone = old.len();
+        for r in old {
+            if matches!(ring::kind(r), ring::ALARM | ring::TIMER) {
+                self.fire(r, now_ms);
+            }
+        }
+        if self.timer.phase == Phase::Done && !self.rung.ringing.contains(&TIMER_RING) {
+            self.fire(TIMER_RING, now_ms);
+        }
+        if gone != self.rung.ringing.len() {
+            let _ = self.save_rung();
+        }
+    }
+
+    /// Reads the stores the start couldn't again.
+    fn retry(&mut self, now_ms: i64) {
+        self.retry_at = now_ms + RETRY_MS;
+        let mut got = 0;
+        if self.pending & mask::ALARMS != 0
+            && let Ok(a) = load_alarms(&self.ui)
+        {
+            self.alarms = a;
+            got |= mask::ALARMS;
+        }
+        if self.pending & mask::TIMERS != 0
+            && let Ok(t) = load_timer(&self.ui)
+        {
+            self.timer = t;
+            got |= mask::TIMERS;
+        }
+        if self.pending & mask::RINGS != 0
+            && let Ok(r) = load_rung()
+        {
+            // what rang since the start stays
+            for (id, m) in r.last {
+                self.rung.mark(id, m);
+            }
+            for s in r.snoozed {
+                if !self.rung.snoozed.contains(&s) {
+                    self.rung.snoozed.push(s);
+                }
+            }
+            got |= mask::RINGS;
+        }
+        if self.pending & mask::EVENTS != 0
+            && let Ok(s) = cal::load(self.events.seed)
+        {
+            self.events = s;
+            self.cal_until = i64::MIN;
+            got |= mask::EVENTS | mask::TODOS;
+        }
+        if got != 0 {
+            self.pending &= !got;
+            dprintln!("dtsrv: read late {:#x}, unread {:#x}", got, self.pending);
+            self.changed(got & !mask::RINGS);
+        }
     }
 
     pub fn ui_session(&self) -> Rc<e32::ipc::Session> {
@@ -168,24 +235,43 @@ impl Dt {
     /// Plans, rings what is due, refreshes the timer's card and `dtsrv.next`; returns how long to sleep (µs).
     pub fn tick(&mut self) -> i32 {
         let (now_ms, offset) = clock();
+        if self.pending != 0 && now_ms >= self.retry_at {
+            self.retry(now_ms);
+        }
         let now = now_ms.div_euclid(1000);
         self.refresh_calendar(now, offset);
         let mut extra = self.reminders.clone();
         extra.extend_from_slice(&self.snoozed_reminders);
-        let p = plan::plan(&self.alarms, &self.timer, self.since, now, offset, &extra);
-        self.since = now;
+        let at = At { ms: now_ms, offset };
+        let p = plan::plan(
+            &self.alarms,
+            &self.timer,
+            &self.rung,
+            self.since,
+            at,
+            &extra,
+        );
+        self.since = at;
+        // marked first: an occurrence rings once even while its alarm still rings from the last one
+        for &(id, m) in &p.occurrences {
+            self.rung.mark(id, m);
+        }
         for r in p.due {
-            if !self.ringing.contains(&r) {
+            if !self.rung.ringing.contains(&r) {
                 self.fire(r, now_ms);
             }
+        }
+        if !p.occurrences.is_empty() {
+            let _ = self.save_rung();
         }
         self.refresh_chrono(now_ms);
         self.publish(now, offset);
         // shortcut: sleeps at most 60 s, so a clock change other than a time.* setting is seen up to a minute late;
         // upgrade to an e32 TIMER_AT (0x36) wrapper, which the kernel completes when the clock is set.
+        let most = if self.pending != 0 { RETRY_MS } else { 60_000 };
         let ms = p
             .next
-            .map_or(60_000, |(at, _)| (at * 1000 - now_ms).clamp(1, 60_000));
+            .map_or(most, |(at, _)| at.saturating_sub(now_ms).clamp(1, most));
         // at most 60 s in µs
         (ms * 1000) as i32
     }
@@ -258,7 +344,7 @@ impl Dt {
             return;
         }
         // from the last plan on, so one due since then still rings; at most a day back (a jump forward)
-        let from = (self.since + 1).min(now).max(now - DAY);
+        let from = (self.since.ms.div_euclid(1000) + 1).min(now).max(now - DAY);
         self.reminders = self
             .events
             .reminders(from, now + REMINDERS_AHEAD, &zone)
@@ -279,6 +365,9 @@ impl Dt {
     fn events_changed(&mut self, bits: u32) -> Result<(), i32> {
         self.cal_until = i64::MIN;
         self.changed(bits);
+        if self.pending & bits != 0 {
+            return Err(KERR_NOT_READY);
+        }
         cal::save(
             &self.events,
             bits & mask::EVENTS != 0,
@@ -304,8 +393,9 @@ impl Dt {
                 (title, a.time_text(self.settings.h24), ["Snooze", "Dismiss"])
             }
             ring::TIMER => {
-                self.timer.tick(now_ms);
-                let _ = self.save_timer();
+                if self.timer.tick(now_ms) {
+                    let _ = self.save_timer();
+                }
                 // the done card replaces the running timer's (same id)
                 self.chrono.clear();
                 let text = format!("Timer · {}", format_left(self.timer.set_ms));
@@ -314,6 +404,9 @@ impl Dt {
             _ => return,
         };
         dprintln!("dtsrv: fire {:#x} {} {}", r, title, text);
+        // saved before it shows, so a restart in between rings it again
+        self.rung.ringing.push(r);
+        let _ = self.save_rung();
         self.open("clock", pages::clock::RING, &r.to_string());
         let n = Notification {
             id: r,
@@ -326,75 +419,87 @@ impl Dt {
             ..Notification::default()
         };
         self.post(&n);
-        self.ringing.push(r);
         self.changed(mask::RINGS | if r == TIMER_RING { mask::TIMERS } else { 0 });
     }
 
-    /// Snooze, Dismiss, Stop or +1 min on a ring (RING_ACTION, or its card's buttons).
+    /// Snooze, Dismiss, Stop or +1 min on a ring (RING_ACTION, or its card's buttons). The store's change is saved
+    /// first: when that fails, or a snooze finds the alarm list full, the ring goes on and the error is returned.
     fn act(&mut self, r: u32, what: i32) -> Result<(), i32> {
-        let Some(i) = self.ringing.iter().position(|&x| x == r) else {
+        if !self.rung.ringing.contains(&r) {
             return Err(err::KERR_NOT_FOUND);
-        };
-        self.ringing.remove(i);
+        }
         let (now_ms, offset) = clock();
-        let saved = match ring::kind(r) {
+        let again = matches!(what, action::SNOOZE | action::PLUS_MINUTE);
+        match ring::kind(r) {
             ring::ALARM => {
                 // the planner's ids come from the alarms
                 let id = ring::item(r) as u16;
-                let copy = self.snoozed.iter().position(|s| s.0 == id);
-                let left = copy.map_or(self.settings.snooze_count, |i| self.snoozed.remove(i).1);
-                let snooze = matches!(what, action::SNOOZE | action::PLUS_MINUTE) && left > 0;
+                let copy = self.rung.snoozed.iter().position(|s| s.0 == id);
+                let left = copy.map_or(self.settings.snooze_count, |i| self.rung.snoozed[i].1);
                 let now = minute_of_week(now_ms.div_euclid(1000), offset);
-                match snooze.then(|| self.alarms.snooze_for(id, now, self.settings.snooze_min)) {
-                    Some(Ok(new)) => {
+                let mut staged = self.alarms.clone();
+                let new = if again && left > 0 {
+                    let new = staged
+                        .snooze_for(id, now, self.settings.snooze_min)
+                        .map_err(|_| {
+                            dprintln!("dtsrv: action {:#x} snooze: the list is full", r);
+                            err::KERR_OVERFLOW
+                        })?;
+                    Some(new)
+                } else {
+                    staged.dismissed(id);
+                    None
+                };
+                if copy.is_some() {
+                    staged.remove(id);
+                }
+                self.write(mask::ALARMS, store::ALARMS, &staged.encode())?;
+                self.alarms = staged;
+                if copy.is_some() {
+                    self.rung.forget(id);
+                }
+                match new {
+                    Some(new) => {
                         dprintln!(
                             "dtsrv: action {:#x} snooze -> alarm {} ({} left)",
                             r,
                             new,
                             left - 1
                         );
-                        self.snoozed.push((new, left - 1));
+                        self.rung.snoozed.push((new, left - 1));
                     }
-                    Some(Err(_)) => {
-                        dprintln!("dtsrv: action {:#x} snooze: the list is full, dismissed", r);
-                    }
-                    None => {
-                        self.alarms.dismissed(id);
-                        dprintln!("dtsrv: action {:#x} dismiss ({} snoozes left)", r, left);
-                    }
-                }
-                if copy.is_some() {
-                    self.alarms.remove(id);
+                    None => dprintln!("dtsrv: action {:#x} dismiss ({} snoozes left)", r, left),
                 }
                 self.changed(mask::ALARMS);
-                self.save_alarms()
             }
             ring::TIMER => {
-                if matches!(what, action::PLUS_MINUTE | action::SNOOZE) {
-                    self.timer.add(60_000, now_ms);
-                    dprintln!("dtsrv: action {:#x} +1 min", r);
+                let mut t = self.timer;
+                if again {
+                    t.add(60_000, now_ms);
                 } else {
-                    self.timer.reset();
-                    dprintln!("dtsrv: action {:#x} stop", r);
+                    t.reset();
                 }
+                self.write(mask::TIMERS, store::TIMERS, &t.encode())?;
+                self.timer = t;
+                let done = if again { "+1 min" } else { "stop" };
+                dprintln!("dtsrv: action {:#x} {}", r, done);
                 self.changed(mask::TIMERS);
-                self.save_timer()
             }
             ring::REMINDER => {
-                if matches!(what, action::SNOOZE | action::PLUS_MINUTE) {
+                if again {
                     let at = now_ms.div_euclid(1000) + i64::from(self.settings.snooze_min) * 60;
                     self.snoozed_reminders.push((at, r));
                     dprintln!("dtsrv: action {:#x} snooze -> {}", r, at);
                 } else {
                     dprintln!("dtsrv: action {:#x} dismiss", r);
                 }
-                Ok(())
             }
-            _ => Ok(()),
-        };
+            _ => {}
+        }
+        self.rung.ringing.retain(|&x| x != r);
         self.remove_card(r);
         self.changed(mask::RINGS);
-        saved
+        self.save_rung()
     }
 
     /// A tap on one of DTSRV's cards (action 0) or on its button `action - 1`.
@@ -409,7 +514,7 @@ impl Dt {
             return;
         }
         let timer = ring::kind(id) == ring::TIMER;
-        if self.ringing.contains(&id) {
+        if self.rung.ringing.contains(&id) {
             let what = match (timer, action) {
                 (_, 0) => return self.open("clock", pages::clock::RING, &id.to_string()),
                 (true, 1) => action::PLUS_MINUTE,
@@ -433,7 +538,8 @@ impl Dt {
     fn refresh_chrono(&mut self, now_ms: i64) {
         let text = match self.timer.phase {
             Phase::Running { ends_ms } => {
-                format!("{} min left", ((ends_ms - now_ms).max(1) + 59_999) / 60_000)
+                let left = ends_ms.saturating_sub(now_ms).max(1);
+                format!("{} min left", left.saturating_add(59_999) / 60_000)
             }
             _ => String::new(),
         };
@@ -455,7 +561,7 @@ impl Dt {
                 ..Notification::default()
             };
             self.post(&n);
-        } else if !self.ringing.contains(&TIMER_RING) {
+        } else if !self.rung.ringing.contains(&TIMER_RING) {
             self.remove_card(TIMER_RING);
         }
         self.chrono = text;
@@ -477,7 +583,7 @@ impl Dt {
     /// The `dtsrv.next` blob: the next alarm and the next event.
     fn next(&self, now: i64, offset: i32) -> Vec<u8> {
         let mut next = Next::default();
-        if let Some((at, a)) = plan::next_alarm(&self.alarms, now, offset) {
+        if let Some((at, a)) = plan::next_alarm(&self.alarms, &self.rung, now, offset) {
             next.alarm_at = at;
             next.alarm_label = a.label.clone();
         }
@@ -513,7 +619,7 @@ impl Dt {
         let zone = &self.zone;
         let local = pim_ics::to_wall(start, zone);
         let day = local.div_euclid(DAY);
-        let ringing = self.ringing.contains(&r);
+        let ringing = self.rung.ringing.contains(&r);
         if let Some(i) = self
             .events
             .query(day, day, 0, zone, &[])
@@ -589,7 +695,7 @@ impl Dt {
             ..Notification::default()
         };
         self.post(&n);
-        self.ringing.push(r);
+        self.rung.ringing.push(r);
         self.changed(mask::RINGS);
     }
 
@@ -608,28 +714,40 @@ impl Dt {
     /// Ends the rings of `kind` without acting on them (their alarm went, Clear data).
     fn stop_rings(&mut self, kind: u8) {
         let gone: Vec<u32> = self
+            .rung
             .ringing
             .iter()
             .copied()
             .filter(|&r| ring::kind(r) == kind)
             .collect();
-        self.ringing.retain(|&r| ring::kind(r) != kind);
+        self.rung.ringing.retain(|&r| ring::kind(r) != kind);
         for &r in &gone {
             self.remove_card(r);
         }
         if !gone.is_empty() {
+            let _ = self.save_rung();
             self.changed(mask::RINGS);
         }
     }
 
+    /// Writes store `bit`'s file; `KErrNotReady` while it hasn't been read (so the file on disk isn't lost).
+    fn write(&self, bit: u32, path: &str, bytes: &[u8]) -> Result<(), i32> {
+        if self.pending & bit != 0 {
+            return Err(KERR_NOT_READY);
+        }
+        store::write(path, bytes).inspect_err(|e| dprintln!("dtsrv: {} not saved ({})", path, e))
+    }
+
     fn save_alarms(&self) -> Result<(), i32> {
-        store::write(store::ALARMS, &self.alarms.encode())
-            .inspect_err(|e| dprintln!("dtsrv: alarms not saved ({})", e))
+        self.write(mask::ALARMS, store::ALARMS, &self.alarms.encode())
     }
 
     fn save_timer(&self) -> Result<(), i32> {
-        store::write(store::TIMERS, &self.timer.encode())
-            .inspect_err(|e| dprintln!("dtsrv: timer not saved ({})", e))
+        self.write(mask::TIMERS, store::TIMERS, &self.timer.encode())
+    }
+
+    fn save_rung(&self) -> Result<(), i32> {
+        self.write(mask::RINGS, store::RINGS, &self.rung.encode())
     }
 
     /// Tells the sessions watching `bits`; the others keep them for their next WATCH.
@@ -651,42 +769,49 @@ impl Dt {
     fn put_alarm(&mut self, msg: &Message) -> Result<i32, i32> {
         let rec = msg.read8_vec(0)?;
         let a = ipc::read_alarm_record(&rec).map_err(|_| err::KERR_ARGUMENT)?;
+        let mut staged = self.alarms.clone();
         let id = if a.id == 0 {
-            let id = self
-                .alarms
+            let id = staged
                 .add(a.hour, a.minute, a.days, &a.label)
                 .map_err(|_| err::KERR_OVERFLOW)?;
-            self.alarms.set_on(id, a.on);
+            staged.set_on(id, a.on);
             id
-        } else if self.alarms.update(a.clone()) {
+        } else if staged.update(a.clone()) {
             a.id
         } else {
             return Err(err::KERR_NOT_FOUND);
         };
+        // saved before it's in force: a failed save changes nothing, and a retry doesn't make two
+        self.write(mask::ALARMS, store::ALARMS, &staged.encode())?;
+        self.alarms = staged;
         self.changed(mask::ALARMS);
-        self.save_alarms().map(|()| i32::from(id))
+        Ok(i32::from(id))
     }
 
     fn delete_alarm(&mut self, id: i32) -> Result<i32, i32> {
         let id = u16::try_from(id).map_err(|_| err::KERR_NOT_FOUND)?;
-        if !self.alarms.remove(id) {
+        let mut staged = self.alarms.clone();
+        if !staged.remove(id) {
             return Err(err::KERR_NOT_FOUND);
         }
+        self.write(mask::ALARMS, store::ALARMS, &staged.encode())?;
+        self.alarms = staged;
         let r = ring::id(ring::ALARM, u32::from(id));
-        if let Some(i) = self.ringing.iter().position(|&x| x == r) {
-            self.ringing.remove(i);
+        if self.rung.ringing.contains(&r) {
             self.remove_card(r);
             self.changed(mask::RINGS);
         }
-        self.snoozed.retain(|s| s.0 != id);
+        self.rung.forget(id);
+        let _ = self.save_rung();
         self.changed(mask::ALARMS);
-        self.save_alarms().map(|()| 0)
+        Ok(0)
     }
 
     fn timer_op(&mut self, msg: &Message) -> Result<i32, i32> {
         let (which, value) = (msg.int(0), msg.int(1));
         let now_ms = clock().0;
-        let t = &mut self.timer;
+        let mut staged = self.timer;
+        let t = &mut staged;
         match which {
             ipc::timer::GET => {}
             ipc::timer::START => {
@@ -706,6 +831,8 @@ impl Dt {
             _ => return Err(err::KERR_ARGUMENT),
         }
         if which != ipc::timer::GET {
+            self.write(mask::TIMERS, store::TIMERS, &staged.encode())?;
+            self.timer = staged;
             dprintln!(
                 "dtsrv: timer op {} {} -> {:?}",
                 which,
@@ -716,7 +843,6 @@ impl Dt {
                 self.stop_rings(ring::TIMER);
             }
             self.changed(mask::TIMERS);
-            self.save_timer()?;
         }
         reply(msg, 2, &self.timer.encode())
     }
@@ -726,7 +852,8 @@ impl Dt {
         let mut saved = Ok(0);
         if which & mask::ALARMS != 0 {
             self.alarms = Alarms::new();
-            self.snoozed.clear();
+            self.rung.snoozed.clear();
+            self.rung.last.clear();
             self.stop_rings(ring::ALARM);
             saved = saved.and(self.save_alarms().map(|()| 0));
         }
@@ -924,6 +1051,24 @@ impl Service for Dt {
     }
 
     fn message(&mut self, session: &mut Self::Session, msg: Message) {
+        // a change to a store not read yet would overwrite its file
+        let writes = match msg.function() {
+            op::ALARM_PUT | op::ALARM_DEL => mask::ALARMS,
+            op::TIMER if msg.int(0) != ipc::timer::GET => mask::TIMERS,
+            op::EVENT_PUT
+            | op::EVENT_DEL
+            | op::TODO_PUT
+            | op::TODO_DEL
+            | op::IMPORT_ICS
+            | op::CALENDAR_PUT => mask::EVENTS,
+            // the mask is bits
+            op::CLEAR => msg.int(0) as u32 & !mask::RINGS,
+            _ => 0,
+        };
+        if self.pending & writes != 0 {
+            msg.complete(KERR_NOT_READY);
+            return;
+        }
         let r = match msg.function() {
             op::NEXT => {
                 let (now_ms, offset) = clock();
@@ -991,48 +1136,89 @@ fn reply(msg: &Message, slot: usize, data: &[u8]) -> Result<i32, i32> {
     Ok(data.len() as i32)
 }
 
+/// A store moved aside as `x.bad` because it doesn't decode starts empty.
+fn corrupt<T: Default>(path: &str) -> T {
+    dprintln!("dtsrv: {} is corrupt: starting empty", path);
+    store::keep_bad(path);
+    T::default()
+}
+
+/// The store, or the default with `bit` added to `pending` (read again later; its writes wait).
+fn ready<T: Default>(r: Result<T, i32>, bit: u32, pending: &mut u32) -> T {
+    r.unwrap_or_else(|e| {
+        dprintln!(
+            "dtsrv: store {:#x} not read ({}): tried again later",
+            bit,
+            e
+        );
+        *pending |= bit;
+        T::default()
+    })
+}
+
+fn load_alarms(ui: &Ui) -> Result<Alarms, i32> {
+    load(
+        ui,
+        store::ALARMS,
+        "clock.alarms",
+        Alarms::decode,
+        Alarms::encode,
+    )
+}
+
+fn load_timer(ui: &Ui) -> Result<Timer, i32> {
+    load(
+        ui,
+        store::TIMERS,
+        "clock.timer",
+        Timer::decode,
+        Timer::encode,
+    )
+}
+
+fn load_rung() -> Result<Rung, i32> {
+    Ok(match store::read(store::RINGS)? {
+        Some(b) => Rung::decode(&b).unwrap_or_else(|_| corrupt(store::RINGS)),
+        None => Rung::default(),
+    })
+}
+
 /// A store from its file; on the first run (no file) from the setting `key` the Clock app kept it in, which is then
-/// emptied. A corrupt file or setting starts empty.
+/// emptied. A file or setting that doesn't decode starts empty. `Err` when the file or the setting can't be read now:
+/// nothing is written, and the caller tries again.
 fn load<T: Default>(
     ui: &Ui,
     path: &str,
     key: &str,
     decode: impl Fn(&[u8]) -> Result<T, Corrupt>,
     encode: impl Fn(&T) -> Vec<u8>,
-) -> T {
-    match store::read(path) {
-        Ok(Some(b)) => decode(&b).unwrap_or_else(|_| {
-            dprintln!("dtsrv: {} is corrupt: starting empty", path);
-            T::default()
-        }),
-        Ok(None) => {
-            let blob = match ui.get(key) {
-                Ok(Value::Bytes(b)) => b,
-                _ => Vec::new(),
-            };
-            let v = if blob.is_empty() {
-                T::default()
-            } else {
-                decode(&blob).unwrap_or_else(|_| {
-                    dprintln!("dtsrv: import {}: corrupt, starting empty", key);
-                    T::default()
-                })
-            };
-            dprintln!("dtsrv: import {}: {} bytes", key, blob.len());
-            match store::write(path, &encode(&v)) {
-                Ok(()) if !blob.is_empty() => {
-                    if let Err(e) = ui.set(key, &Value::Bytes(Vec::new())) {
-                        dprintln!("dtsrv: import {}: the key stays ({})", key, e);
-                    }
-                }
-                Ok(()) => {}
-                Err(e) => dprintln!("dtsrv: import {}: {} not written ({})", key, path, e),
-            }
-            v
-        }
-        Err(e) => {
-            dprintln!("dtsrv: {} not read ({}): starting empty", path, e);
-            T::default()
-        }
+) -> Result<T, i32> {
+    if let Some(b) = store::read(path)? {
+        return Ok(decode(&b).unwrap_or_else(|_| corrupt(path)));
     }
+    let blob = match ui.get(key) {
+        Ok(Value::Bytes(b)) => b,
+        // an unknown key (a newer shell dropped it): nothing to import
+        Ok(_) | Err(err::KERR_NOT_FOUND) => Vec::new(),
+        Err(e) => return Err(e),
+    };
+    let v = if blob.is_empty() {
+        T::default()
+    } else {
+        decode(&blob).unwrap_or_else(|_| {
+            dprintln!("dtsrv: import {}: corrupt, starting empty", key);
+            T::default()
+        })
+    };
+    dprintln!("dtsrv: import {}: {} bytes", key, blob.len());
+    match store::write(path, &encode(&v)) {
+        Ok(()) if !blob.is_empty() => {
+            if let Err(e) = ui.set(key, &Value::Bytes(Vec::new())) {
+                dprintln!("dtsrv: import {}: the key stays ({})", key, e);
+            }
+        }
+        Ok(()) => {}
+        Err(e) => dprintln!("dtsrv: import {}: {} not written ({})", key, path, e),
+    }
+    Ok(v)
 }

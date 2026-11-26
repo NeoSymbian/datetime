@@ -11,6 +11,8 @@ use e32::sys::err;
 const DIRS: [&str; 2] = ["C:\\private\\", "C:\\private\\e0008003\\"];
 pub const ALARMS: &str = "C:\\private\\e0008003\\alarms.dat";
 pub const TIMERS: &str = "C:\\private\\e0008003\\timers.dat";
+/// What rang and what still rings (`datetime_core::plan::Rung`).
+pub const RINGS: &str = "C:\\private\\e0008003\\rings.dat";
 pub const EVENTS: &str = "C:\\private\\e0008003\\calendar.ics";
 pub const TODOS: &str = "C:\\private\\e0008003\\todo.ics";
 /// NEOCONT's book (phone's `contacts` crate), only read here.
@@ -19,7 +21,8 @@ pub const BOOK: &str = "C:\\private\\e0005001\\contacts.dat";
 /// are well under this).
 const FILE_MAX: usize = 2 << 20;
 
-/// The file's bytes; `Ok(None)` when there is none yet.
+/// The file's bytes; `Ok(None)` when there is none yet (`KErrNotFound`, or no private directory yet:
+/// `KErrPathNotFound`).
 pub fn read(path: &str) -> Result<Option<Vec<u8>>, i32> {
     let fs = Fs::connect()?;
     let f = match File::open(&fs, path, mode::READ | mode::SHARE_READERS_ONLY) {
