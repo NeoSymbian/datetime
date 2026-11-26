@@ -70,7 +70,8 @@ fn chip_time(t: String) -> String {
 
 /// The next alarm after now: (Unix UTC seconds, the alarm).
 fn next_alarm<'a>(m: &'a Model, now: &Now) -> Option<(i64, &'a Alarm)> {
-    plan::next_alarm(&m.alarms, now.utc, now.tz)
+    // the app has no ring history (DTSRV keeps it): the display ignores what already rang
+    plan::next_alarm(&m.alarms, &plan::Rung::default(), now.utc, now.tz)
 }
 
 /// Everything, from the model.
@@ -339,7 +340,7 @@ fn editor(s: &ClockState<'_>, m: &Model, now: &Now) {
     let when = one
         .add(a.hour, a.minute, a.days, "")
         .ok()
-        .and_then(|_| plan::next_alarm(&one, now.utc, now.tz))
+        .and_then(|_| plan::next_alarm(&one, &plan::Rung::default(), now.utc, now.tz))
         .map(|(at, _)| text::rings(at, now.utc, now.tz))
         .unwrap_or_default();
     s.set_edit_when(when.as_str().into());
