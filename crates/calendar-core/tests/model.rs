@@ -673,3 +673,30 @@ fn fixed_offsets_are_zones() {
     // 09:00 CET = 12:00 in Yerevan
     assert_eq!(hours(&of(&q, "spring-standup@example.com")), [12]);
 }
+
+// --- review fixes
+
+#[test]
+fn editing_one_anniversary_keeps_the_copy_single() {
+    let mut s = Store::load("", "");
+    let z = berlin();
+    let uid = s
+        .put(
+            &EventDraft {
+                kind: Kind::Anniversary,
+                title: "Met Ani".into(),
+                start: day(2019, 6, 3) * DAY,
+                end: day(2019, 6, 4) * DAY,
+                ..EventDraft::default()
+            },
+            &z,
+            0,
+        )
+        .expect("put");
+    let mut d = s.get(&uid, Some(day(2026, 6, 3) * DAY), &z).expect("get");
+    d.title = "Met Ani: 7 years".into();
+    s.put(&d, &z, 0).expect("put one");
+    let q = s.query(day(2026, 6, 1), day(2027, 6, 30), 0, &z, &[]);
+    let titles: Vec<&str> = of(&q, &uid).iter().map(|i| i.title.as_str()).collect();
+    assert_eq!(titles, ["Met Ani: 7 years", "Met Ani"]);
+}

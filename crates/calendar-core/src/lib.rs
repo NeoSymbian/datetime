@@ -724,13 +724,16 @@ impl Store {
         let mut d = d.clone();
         if d.kind == Kind::Anniversary {
             d.all_day = true;
-            if !matches!(
-                d.repeat,
-                Repeat::Every {
-                    freq: Freq::Yearly,
-                    ..
-                }
-            ) {
+            // the series repeats yearly; a changed occurrence (RECURRENCE-ID) stays a single one
+            if d.only.is_none()
+                && !matches!(
+                    d.repeat,
+                    Repeat::Every {
+                        freq: Freq::Yearly,
+                        ..
+                    }
+                )
+            {
                 d.repeat = Repeat::Every {
                     freq: Freq::Yearly,
                     interval: 1,
