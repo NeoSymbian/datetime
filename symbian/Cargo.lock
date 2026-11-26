@@ -424,6 +424,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "calendar-ui"
+version = "0.1.0"
+dependencies = [
+ "calendar-core",
+ "neoui-kit",
+ "pim-ics",
+ "slint",
+]
+
+[[package]]
 name = "calloop"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2649,6 +2659,21 @@ dependencies = [
 name = "neoaudio"
 version = "0.1.0"
 source = "git+https://github.com/NeoSymbian/neohw?rev=a11fa906f35bbd1dcec979495210dcdab3dc8651#a11fa906f35bbd1dcec979495210dcdab3dc8651"
+
+[[package]]
+name = "neocal"
+version = "0.1.0"
+dependencies = [
+ "calendar-core",
+ "calendar-ui",
+ "datetime-core",
+ "dt-client",
+ "e32",
+ "neoapp",
+ "neoui-proto",
+ "pim-ics",
+ "slint",
+]
 
 [[package]]
 name = "neoclock"
