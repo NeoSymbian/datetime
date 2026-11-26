@@ -3,7 +3,7 @@
 # (GPL-3.0, they link Slint), tested on the host. The EXEs are the separate symbian/ workspace (ARMv8, nightly build-std).
 [workspace]
 resolver = "3"
-members = ["crates/datetime-core", "crates/pim-ics", "crates/calendar-core"]
+members = ["crates/datetime-core", "crates/pim-ics", "crates/calendar-core", "crates/clock-ui"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,6 +14,7 @@ license = "Apache-2.0"
 datetime-core = { path = "crates/datetime-core" }
 pim-ics = { path = "crates/pim-ics" }
 calendar-core = { path = "crates/calendar-core" }
+clock-ui = { path = "crates/clock-ui" }
 # NeoSymbian/files: the iCalendar/vCard parser and editor (FA7)
 neo-format-pim = { git = "https://github.com/NeoSymbian/files", rev = "de27b50a76d1482adbafd24b5f0d28b894409acf" }
 # NeoSymbian/neoui: the wire types (time zones, world cities, the face text, the settings registry) and the kit

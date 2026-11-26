@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// TimeCard (dt2-spec-components): a kit Card holding digits, a label line and a trailing control. Two uses here:
+// AlarmCard (92 dp: 38 dp digits, the day letters, a Switch; clk2-alarms) and CityRow (64 dp rows of the World card:
+// a day/night dot, the city, "Today · −4 h", the time in 28 light; clk2-clock).
+import { Theme, BigClock, Card, Switch } from "@neoui/kit.slint";
+
+export component TimeCard inherits Card {
+    in property <bool> pressed;
+    clip: true;
+    Rectangle {
+        background: root.pressed ? Theme.pressed : transparent;
+    }
+
+    @children
+}
+
+// "M T W T F S S": on days in the accent (or grey when the alarm is off), the rest dim
+export component DayLetters inherits HorizontalLayout {
+    in property <[bool]> days;
+    in property <bool> on: true;
+    spacing: 5 * Theme.dp;
+    for letter[i] in ["M", "T", "W", "T", "F", "S", "S"]: Text {
+        text: letter;
+        font-size: 12.5 * Theme.dp;
+        font-weight: root.days[i] ? 700 : 500;
+        color: !root.days[i] ? #4a4f57 : root.on ? Theme.accent : Theme.text-secondary;
+        vertical-alignment: center;
+    }
+}
+
+export component AlarmCard inherits TimeCard {
+    in property <int> hours;
+    in property <int> minutes;
+    in property <bool> lead-zero: true;
+    in property <string> am-pm;
+    in property <string> label;
+    // no day on: rings once (`once` names when)
+    in property <[bool]> days;
+    in property <string> once;
+    in-out property <bool> on;
+    callback clicked();
+    callback toggled(bool);
+    height: 92 * Theme.dp;
+    pressed: touch.pressed;
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        spacing: 12 * Theme.dp;
+        VerticalLayout {
+            alignment: center;
+            spacing: 6 * Theme.dp;
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                alignment: start;
+                spacing: 6 * Theme.dp;
+                opacity: root.on ? 1 : 0.42;
+                BigClock {
+                    hours: root.hours;
+                    minutes: root.minutes;
+                    lead-zero: root.lead-zero;
+                    digit-h: 38 * Theme.dp;
+                }
+
+                if root.am-pm != "": VerticalLayout {
+                    alignment: end;
+                    Text {
+                        text: root.am-pm;
+                        color: Theme.text-secondary;
+                        font-size: 15 * Theme.dp;
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: start;
+                spacing: 10 * Theme.dp;
+                Text {
+                    text: root.label;
+                    color: Theme.text-dim;
+                    font-size: 13.5 * Theme.dp;
+                    font-family: "DejaVu Sans";
+                    overflow: elide;
+                }
+
+                if root.once == "": DayLetters {
+                    days: root.days;
+                    on: root.on;
+                }
+                if root.once != "": Text {
+                    text: root.once;
+                    color: root.on ? Theme.accent : Theme.text-secondary;
+                    font-size: 12.5 * Theme.dp;
+                    font-weight: 700;
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Switch {
+                on <=> root.on;
+                label: "Alarm";
+                toggled(on) => {
+                    root.toggled(on);
+                }
+            }
+        }
+    }
+}
+
+// One city of the World card (the card draws the rows and the hairlines between them)
+export component CityRow inherits Rectangle {
+    in property <string> name;
+    // "Today · −4 h"
+    in property <string> when;
+    in property <string> time;
+    in property <bool> night;
+    in property <bool> last;
+    callback clicked();
+    height: 64 * Theme.dp;
+    background: touch.pressed ? Theme.pressed : transparent;
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        spacing: 12 * Theme.dp;
+        VerticalLayout {
+            alignment: center;
+            spacing: 3 * Theme.dp;
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                alignment: start;
+                spacing: 8 * Theme.dp;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 8 * Theme.dp;
+                        height: self.width;
+                        border-radius: self.width / 2;
+                        background: root.night ? #5b6b8c : #f2c94c;
+                    }
+                }
+
+                Text {
+                    text: root.name;
+                    color: Theme.text;
+                    font-size: 16 * Theme.dp;
+                    font-weight: 600;
+                }
+            }
+
+            Text {
+                text: root.when;
+                color: Theme.text-dim;
+                font-size: 13 * Theme.dp;
+            }
+        }
+
+        Text {
+            text: root.time;
+            color: Theme.text;
+            font-size: 28 * Theme.dp;
+            font-weight: 300;
+            vertical-alignment: center;
+        }
+    }
+
+    if !root.last: Rectangle {
+        x: 16 * Theme.dp;
+        y: parent.height - self.height;
+        width: parent.width - self.x;
+        height: max(1px, Theme.dp / 3);
+        background: #ffffff12;
+    }
+}
