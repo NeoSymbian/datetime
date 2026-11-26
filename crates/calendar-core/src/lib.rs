@@ -547,9 +547,16 @@ impl Store {
         let now = to_wall(now_utc, zone);
         let changed = self.overrides();
         let mut best: Option<Instance> = None;
+        // no fixed horizon (a lone 29 February is up to 8 years on): expansion stops at the first hit, or year 9999
+        let last = Date {
+            year: 9999,
+            month: 12,
+            day: 31,
+        }
+        .days();
         for it in &self.items {
             let ch = changed.get(it.uid.as_str()).map_or(&[][..], Vec::as_slice);
-            let hi = best.as_ref().map_or(now + 400 * DAY, |b| b.start + 1);
+            let hi = best.as_ref().map_or(last * DAY, |b| b.start + 1);
             self.each(it, now, hi, zone, ch, &mut |inst, _| {
                 if inst.start < now {
                     return true;

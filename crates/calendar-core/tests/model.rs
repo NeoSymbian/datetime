@@ -796,3 +796,12 @@ fn rules_with_by_filters_they_dont_repeat_are_outside_the_subset() {
     assert_eq!(days(&of(&q, "x")), [day(2026, 1, 1)]);
     assert_eq!(s.get("x", None, &z).expect("get").repeat, Repeat::Other);
 }
+
+#[test]
+fn next_event_finds_a_leap_day_years_away() {
+    let s = one_event("DTSTART;VALUE=DATE:20240229\r\nRRULE:FREQ=YEARLY\r\n");
+    let n = s
+        .next_event(at(2024, 3, 1, 12, 0), &berlin())
+        .expect("next");
+    assert_eq!(n.start, day(2028, 2, 29) * DAY);
+}
