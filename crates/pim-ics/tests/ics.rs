@@ -72,6 +72,20 @@ fn local_times_in_gaps_move_forward() {
 }
 
 #[test]
+fn ambiguous_local_times_are_the_first_instant() {
+    let berlin = tz::Rule::parse("CET-1CEST,M3.5.0,M10.5.0/3").expect("berlin");
+    // 02:30 on 25 October is 02:30 CEST (00:30 UTC) first, then 02:30 CET
+    assert_eq!(
+        pim_ics::to_utc(utc(2026, 10, 25, 2) + 1800, &berlin),
+        utc(2026, 10, 25, 0) + 1800
+    );
+    assert_eq!(
+        pim_ics::to_utc(utc(2026, 10, 25, 3), &berlin),
+        utc(2026, 10, 25, 2)
+    );
+}
+
+#[test]
 fn uids_add_remove_and_round_trip() {
     let mut ics = Ics::parse(BERLIN_ZONE);
     assert_eq!(ics.write(), BERLIN_ZONE);
@@ -170,8 +184,20 @@ fn rules_read_and_write() {
         r.write(),
         "FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE;UNTIL=20261231T235959Z"
     );
-    assert!(Rule::parse("FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=16", start).is_some());
+    for inside in [
+        "FREQ=YEARLY;BYMONTH=11;BYMONTHDAY=16",
+        "FREQ=YEARLY;BYMONTH=11",
+        "FREQ=MONTHLY;BYMONTHDAY=16",
+    ] {
+        assert!(Rule::parse(inside, start).is_some(), "{inside}");
+    }
     for outside in [
+        // filters that would limit or expand the rule, not repeat its start
+        "FREQ=DAILY;BYMONTHDAY=16",
+        "FREQ=WEEKLY;BYMONTHDAY=16",
+        "FREQ=DAILY;BYMONTH=11",
+        "FREQ=MONTHLY;BYMONTH=11",
+        "FREQ=YEARLY;BYMONTHDAY=16",
         "FREQ=MONTHLY;BYDAY=2TU",
         "FREQ=MONTHLY;BYSETPOS=1;BYDAY=TU",
         "FREQ=YEARLY;BYMONTH=3",

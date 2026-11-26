@@ -61,6 +61,7 @@ pub(crate) struct Series<'a> {
     pub tz: Tz,
     pub rule: Option<&'a Rule>,
     pub until: Option<Key>,
+    pub all_day: bool,
 }
 
 /// Periods are counted from DTSTART; this many is far beyond any real calendar and stops a hostile rule.
@@ -163,6 +164,10 @@ pub(crate) fn walls(
             }
             let wall = day * DAY + sod;
             let u = utc(wall);
+            // a generated time in a spring gap doesn't exist: not an occurrence, not counted (RFC 5545 3.3.10)
+            if !s.all_day && wall != s.start && s.tz.wall(u, zone) != wall {
+                continue;
+            }
             if s.until.is_some_and(|until| until.until_passed(wall, u)) {
                 return;
             }

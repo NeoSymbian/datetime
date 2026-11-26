@@ -29,11 +29,18 @@ impl Zone for i32 {
     }
 }
 
-/// The UTC of a wall time in `z`. A time in the spring gap moves forward by the gap (RFC 5545 3.3.5); in the autumn
-/// overlap it is the second occurrence.
+/// The UTC of a wall time in `z`. A time in the spring gap moves forward by the gap; in the autumn overlap it is the
+/// first occurrence (RFC 5545 3.3.5).
 pub fn to_utc(wall: i64, z: &dyn Zone) -> i64 {
     let guess = wall - i64::from(z.offset_at(wall));
-    wall - i64::from(z.offset_at(guess))
+    let u = wall - i64::from(z.offset_at(guess));
+    // with the offset of a day before, an overlap's earlier instant reads the same wall time
+    let first = wall - i64::from(z.offset_at(u - 86_400));
+    if first < u && to_wall(first, z) == wall {
+        first
+    } else {
+        u
+    }
 }
 
 pub fn to_wall(utc: i64, z: &dyn Zone) -> i64 {
