@@ -1,2 +1,3 @@
 # For NeoSymbian/build rust/exes.txt: copy these lines and target/armv8a-neosymbian-eabi/release/lib*.a into build/rust/.
 NEOCLOCK.EXE   0xE0008001  libneoclock.a
+DTSRV.EXE      0xE0008003  libdtsrv.a

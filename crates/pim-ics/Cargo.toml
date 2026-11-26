@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "pim-ics"
+description = "iCalendar for Calendar and DTSRV: files' neo-format-pim plus UIDs, adding and removing items, EXDATE, zones with daylight saving"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# NeoSymbian/files (Apache-2.0): the byte-exact iCalendar/vCard parser and editor (FA7)
+neo-format-pim = { workspace = true }
+neoui-proto = { workspace = true }

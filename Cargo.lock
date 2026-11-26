@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "calendar-core"
+version = "0.1.0"
+dependencies = [
+ "neoui-proto",
+ "pim-ics",
+]
+
+[[package]]
 name = "datetime-core"
 version = "0.1.0"
 dependencies = [
@@ -10,6 +18,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "neo-format-pim"
+version = "0.1.0"
+source = "git+https://github.com/NeoSymbian/files?rev=de27b50a76d1482adbafd24b5f0d28b894409acf#de27b50a76d1482adbafd24b5f0d28b894409acf"
+
+[[package]]
 name = "neoui-proto"
 version = "0.1.0"
 source = "git+https://github.com/NeoSymbian/neoui?rev=68a4fb27f45d956a3081e37ea982ed65c30f6453#68a4fb27f45d956a3081e37ea982ed65c30f6453"
+
+[[package]]
+name = "pim-ics"
+version = "0.1.0"
+dependencies = [
+ "neo-format-pim",
+ "neoui-proto",
+]

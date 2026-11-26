@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "calendar-core"
+description = "Calendar's model: events, recurrence (an RRULE subset), to-dos, the agenda and range queries, birthdays"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+pim-ics = { workspace = true }
+neoui-proto = { workspace = true }

@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# DTSRV.EXE: the resident server that owns and rings every alarm, timer, event and to-do (docs datetime.md). It
+# links no Slint (and so not neoapp), so it is Apache-2.0.
+[package]
+name = "dtsrv"
+description = "DTSRV.EXE: Clock and Calendar's resident server (NeoSymbian/datetime)"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+test = false
+
+[dependencies]
+e32.workspace = true
+neoui-proto.workspace = true
+datetime-core.workspace = true
