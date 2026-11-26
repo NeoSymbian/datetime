@@ -700,3 +700,46 @@ fn editing_one_anniversary_keeps_the_copy_single() {
     let titles: Vec<&str> = of(&q, &uid).iter().map(|i| i.title.as_str()).collect();
     assert_eq!(titles, ["Met Ani: 7 years", "Met Ani"]);
 }
+
+#[test]
+fn a_moved_occurrence_keeps_its_own_reminder() {
+    let mut s = Store::load("", "");
+    let z = berlin();
+    let uid = s
+        .put(
+            &EventDraft {
+                title: "Stand-up".into(),
+                start: at(2026, 11, 16, 10, 0),
+                end: at(2026, 11, 16, 10, 15),
+                repeat: Repeat::Every {
+                    freq: Freq::Weekly,
+                    interval: 1,
+                    days: 0b11,
+                    count: 0,
+                    until: None,
+                },
+                reminder: Some(10),
+                ..EventDraft::default()
+            },
+            &z,
+            0,
+        )
+        .expect("put");
+    // Monday's occurrence onto Tuesday's, at the same time
+    let mut d = s.get(&uid, Some(at(2026, 11, 16, 10, 0)), &z).expect("get");
+    d.start += DAY;
+    d.end += DAY;
+    s.put(&d, &z, 0).expect("move");
+    let (from, to) = (at(2026, 11, 16, 0, 0), at(2026, 11, 18, 0, 0));
+    let r = s.reminders(from, to, &z);
+    assert_eq!(r.len(), 2);
+    assert_ne!(r[0].1, r[1].1);
+    // both ring for Tuesday 10:00 CET = 09:00Z
+    for (_, id) in &r {
+        assert_eq!(
+            s.reminder(*id),
+            Some((uid.as_str(), at(2026, 11, 17, 9, 0)))
+        );
+    }
+    assert_eq!(s.reminders(from, to, &z), r);
+}

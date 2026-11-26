@@ -131,7 +131,7 @@ pub struct Todo {
     pub reminder: Option<u16>,
 }
 
-/// A reminder DTSRV arms: a small number standing for (uid, occurrence start) in the store's table.
+/// A reminder DTSRV arms: a small number standing for (uid, occurrence) in the store's table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ReminderId(pub u32);
 
@@ -261,8 +261,8 @@ pub struct Store {
     calendars: Vec<Calendar>,
     todos: Ics,
     items: Vec<Item>,
-    /// ReminderId → (uid, occurrence start utc)
-    rings: BTreeMap<u32, (String, i64)>,
+    /// ReminderId → (uid, the occurrence's original start (its recurrence id) utc, its start utc)
+    rings: BTreeMap<u32, (String, i64, i64)>,
     next_ring: u32,
     /// mixed into new UIDs (the caller's: boot time, a counter…)
     pub seed: u64,
@@ -567,7 +567,8 @@ impl Store {
         until_utc: i64,
         zone: &dyn Zone,
     ) -> Vec<(i64, ReminderId)> {
-        let mut due: Vec<(i64, String, i64)> = Vec::new();
+        // (when, uid, recur utc, start utc)
+        let mut due: Vec<(i64, String, i64, i64)> = Vec::new();
         let changed = self.overrides();
         for it in &self.items {
             let Some(m) = it.reminder else { continue };
@@ -585,7 +586,8 @@ impl Store {
                 };
                 let at = utc - lead;
                 if from_utc <= at && at < until_utc {
-                    due.push((at, inst.uid, utc));
+                    // a moved occurrence can share another's start: its recurrence id tells them apart
+                    due.push((at, inst.uid, to_utc(inst.recur, zone), utc));
                 }
                 true
             });
@@ -595,23 +597,24 @@ impl Store {
                 let utc = to_utc(d, zone);
                 let at = utc - i64::from(m) * 60;
                 if from_utc <= at && at < until_utc {
-                    due.push((at, t.uid, utc));
+                    due.push((at, t.uid, utc, utc));
                 }
             }
         }
         due.sort();
-        self.rings.retain(|_, (_, s)| *s >= from_utc - 7 * DAY);
+        self.rings.retain(|_, (_, _, s)| *s >= from_utc - 7 * DAY);
         due.into_iter()
-            .map(|(at, uid, start)| (at, self.ring_id(uid, start)))
+            .map(|(at, uid, recur, start)| (at, self.ring_id(uid, recur, start)))
             .collect()
     }
 
-    fn ring_id(&mut self, uid: String, start: i64) -> ReminderId {
-        if let Some((&id, _)) = self
+    fn ring_id(&mut self, uid: String, recur: i64, start: i64) -> ReminderId {
+        if let Some((&id, ring)) = self
             .rings
-            .iter()
-            .find(|(_, (u, s))| *u == uid && *s == start)
+            .iter_mut()
+            .find(|(_, (u, r, _))| *u == uid && *r == recur)
         {
+            ring.2 = start;
             return ReminderId(id);
         }
         while self.rings.contains_key(&self.next_ring) {
@@ -619,13 +622,13 @@ impl Store {
         }
         let id = self.next_ring;
         self.next_ring = self.next_ring % (RING_IDS - 1) + 1;
-        self.rings.insert(id, (uid, start));
+        self.rings.insert(id, (uid, recur, start));
         ReminderId(id)
     }
 
     /// The (uid, occurrence start utc) a reminder id stands for.
     pub fn reminder(&self, id: ReminderId) -> Option<(&str, i64)> {
-        self.rings.get(&id.0).map(|(u, s)| (u.as_str(), *s))
+        self.rings.get(&id.0).map(|(u, _, s)| (u.as_str(), *s))
     }
 
     /// The occurrences on `from_day..=to_day` and the to-dos whose text has `text` (any case).
