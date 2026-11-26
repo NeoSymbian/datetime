@@ -525,6 +525,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "clock-ui"
+version = "0.1.0"
+dependencies = [
+ "datetime-core",
+ "neoui-kit",
+ "neoui-proto",
+ "slint",
+]
+
+[[package]]
 name = "clru"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2628,7 +2638,7 @@ source = "git+https://github.com/NeoSymbian/files?rev=de27b50a76d1482adbafd24b5f
 [[package]]
 name = "neoapp"
 version = "0.1.0"
-source = "git+https://github.com/NeoSymbian/neoui?rev=68a4fb27f45d956a3081e37ea982ed65c30f6453#68a4fb27f45d956a3081e37ea982ed65c30f6453"
+source = "git+https://github.com/NeoSymbian/neoui?rev=4f19d26d74e267d14638eb83a286b656dba29ed6#4f19d26d74e267d14638eb83a286b656dba29ed6"
 dependencies = [
  "e32",
  "neoui-proto",
@@ -2636,13 +2646,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "neoaudio"
+version = "0.1.0"
+source = "git+https://github.com/NeoSymbian/neohw?rev=a11fa906f35bbd1dcec979495210dcdab3dc8651#a11fa906f35bbd1dcec979495210dcdab3dc8651"
+
+[[package]]
 name = "neoclock"
 version = "0.1.0"
 dependencies = [
+ "clock-ui",
  "datetime-core",
+ "dt-client",
  "e32",
  "neoapp",
- "neoui-kit",
+ "neoaudio",
  "neoui-proto",
  "slint",
 ]
@@ -2650,7 +2667,7 @@ dependencies = [
 [[package]]
 name = "neoui-kit"
 version = "0.1.0"
-source = "git+https://github.com/NeoSymbian/neoui?rev=68a4fb27f45d956a3081e37ea982ed65c30f6453#68a4fb27f45d956a3081e37ea982ed65c30f6453"
+source = "git+https://github.com/NeoSymbian/neoui?rev=4f19d26d74e267d14638eb83a286b656dba29ed6#4f19d26d74e267d14638eb83a286b656dba29ed6"
 dependencies = [
  "slint-build",
 ]
@@ -2658,7 +2675,7 @@ dependencies = [
 [[package]]
 name = "neoui-proto"
 version = "0.1.0"
-source = "git+https://github.com/NeoSymbian/neoui?rev=68a4fb27f45d956a3081e37ea982ed65c30f6453#68a4fb27f45d956a3081e37ea982ed65c30f6453"
+source = "git+https://github.com/NeoSymbian/neoui?rev=4f19d26d74e267d14638eb83a286b656dba29ed6#4f19d26d74e267d14638eb83a286b656dba29ed6"
 
 [[package]]
 name = "nix"

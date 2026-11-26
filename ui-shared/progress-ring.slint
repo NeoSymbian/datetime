@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// ProgressRing (dt2-spec-components): the ring around the timer's digits (250 dp, stroke 10), with its content
+// centred inside. The phone's Slint (software renderer, no path feature) can't stroke an arc, so the app draws the
+// ring into `ring` (clock-ui `ring::draw`), as it draws the analog face.
+import { Theme } from "@neoui/kit.slint";
+
+export component ProgressRing inherits Rectangle {
+    in property <image> ring;
+    in property <length> size: 250 * Theme.dp;
+    width: root.size;
+    height: root.size;
+    Image {
+        source: root.ring;
+        width: parent.width;
+        height: parent.height;
+    }
+
+    @children
+}

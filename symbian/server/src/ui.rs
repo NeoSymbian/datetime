@@ -12,8 +12,7 @@ use neoui_proto::settings::Value;
 use neoui_proto::settings::value::ENCODED_MAX;
 
 /// OPEN's flag (slot 3, 1.19): the screen comes on and the shade closes, as for an incoming call.
-// shortcut: a copy of neoui_proto::ipc::OPEN_WAKE, which comes with the 1.19 pin; use that then.
-pub const OPEN_WAKE: i32 = 1;
+pub use neoui_proto::ipc::OPEN_WAKE;
 const KERR_ARGUMENT: i32 = -6;
 
 pub struct Ui(Rc<Session>);

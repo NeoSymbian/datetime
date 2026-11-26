@@ -8,12 +8,14 @@ members = ["clock", "client", "server"]
 
 [workspace.dependencies]
 e32 = { git = "https://github.com/NeoSymbian/e32-rs", rev = "8084b94f9e8264384113e7ea6fa52adf70944cc5", features = ["critical-section"] }
-neoui-proto = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3081e37ea982ed65c30f6453" }
-neoapp = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3081e37ea982ed65c30f6453" }
-neoui-kit = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3081e37ea982ed65c30f6453" }
+neoui-proto = { git = "https://github.com/NeoSymbian/neoui", rev = "4f19d26d74e267d14638eb83a286b656dba29ed6" }
+neoapp = { git = "https://github.com/NeoSymbian/neoui", rev = "4f19d26d74e267d14638eb83a286b656dba29ed6" }
 slint = { version = "=1.18.1", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
 datetime-core = { path = "../crates/datetime-core" }
 dt-client = { path = "client" }
+clock-ui = { path = "../crates/clock-ui" }
+# NeoSymbian/neohw: the NeoAudio contract and its tones (the ring tone), at neoui's pin
+neoaudio = { git = "https://github.com/NeoSymbian/neohw", rev = "a11fa906f35bbd1dcec979495210dcdab3dc8651" }
 pim-ics = { path = "../crates/pim-ics" }
 calendar-core = { path = "../crates/calendar-core" }
 
