@@ -1,0 +1,400 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// The Timers tab (DT02): Timer | Stopwatch behind a segmented switch. The timer (clk2-timer-set, -running, -done):
+// steppers and presets while idle, the 250 dp ProgressRing while it runs, red when done; DTSRV runs it (DT1). The
+// stopwatch (clk2-stopwatch-idle, -running) stays the app's own: the time, the laps (fastest and slowest marked).
+import { Theme, NeoList, BigClock, Glyph, Chip, Card } from "@neoui/kit.slint";
+import { ProgressRing } from "@dt-shared/progress-ring.slint";
+import { Segmented } from "@dt-shared/segmented.slint";
+import { BigButton } from "parts.slint";
+import { ClockState } from "state.slint";
+
+// ▲ / ▼ over and under the idle timer's minutes and seconds
+component Step inherits Rectangle {
+    in property <bool> up;
+    in property <string> label;
+    callback clicked();
+    width: 64 * Theme.dp;
+    height: 36 * Theme.dp;
+    border-radius: 18 * Theme.dp;
+    background: t.pressed ? Theme.pressed : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    Glyph {
+        source: root.up ? @image-url("@neoui/icons/sys/chevron_up.svg") : @image-url("@neoui/icons/sys/chevron_down.svg");
+        size: 26 * Theme.dp;
+        colorize: Theme.text-dim;
+    }
+
+    t := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+component TimerPane inherits VerticalLayout {
+    property <int> phase: ClockState.timer-phase;
+    VerticalLayout {
+        vertical-stretch: 1;
+        alignment: center;
+        spacing: 18 * Theme.dp;
+        if root.phase == 0: VerticalLayout {
+            spacing: 4 * Theme.dp;
+            HorizontalLayout {
+                alignment: center;
+                spacing: 46 * Theme.dp;
+                Step {
+                    up: true;
+                    label: "One more minute";
+                    clicked => {
+                        ClockState.timer-step(60);
+                    }
+                }
+
+                Step {
+                    up: true;
+                    label: "Ten more seconds";
+                    clicked => {
+                        ClockState.timer-step(10);
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                BigClock {
+                    hours: ClockState.timer-a;
+                    minutes: ClockState.timer-b;
+                    digit-h: 72 * Theme.dp;
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 96 * Theme.dp;
+                for unit in ["MIN", "SEC"]: Text {
+                    text: unit;
+                    color: Theme.text-dim;
+                    font-size: 12 * Theme.dp;
+                    letter-spacing: 0.6 * Theme.dp;
+                }
+            }
+
+            HorizontalLayout {
+                alignment: center;
+                spacing: 46 * Theme.dp;
+                Step {
+                    label: "One minute less";
+                    clicked => {
+                        ClockState.timer-step(-60);
+                    }
+                }
+
+                Step {
+                    label: "Ten seconds less";
+                    clicked => {
+                        ClockState.timer-step(-10);
+                    }
+                }
+            }
+        }
+        if root.phase == 0: VerticalLayout {
+            spacing: 8 * Theme.dp;
+            padding-left: 16 * Theme.dp;
+            padding-right: 16 * Theme.dp;
+            for row in [0, 3]: HorizontalLayout {
+                alignment: center;
+                spacing: 8 * Theme.dp;
+                for p[i] in [ClockState.presets[row], ClockState.presets[row + 1], ClockState.presets[row + 2]]: Chip {
+                    text: p;
+                    on: ClockState.preset-current == row + i;
+                    toggled => {
+                        ClockState.timer-preset(row + i);
+                    }
+                }
+            }
+        }
+        if root.phase != 0: HorizontalLayout {
+            alignment: center;
+            ProgressRing {
+                ring: ClockState.timer-ring;
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 8 * Theme.dp;
+                    HorizontalLayout {
+                        alignment: center;
+                        BigClock {
+                            hours: ClockState.timer-a;
+                            minutes: ClockState.timer-b;
+                            digit-h: 56 * Theme.dp;
+                        }
+                    }
+
+                    Text {
+                        text: ClockState.timer-line;
+                        color: root.phase == 3 ? Theme.danger : Theme.text-dim;
+                        font-size: (root.phase == 3 ? 15 : 14) * Theme.dp;
+                        font-weight: root.phase == 3 ? 600 : 400;
+                        horizontal-alignment: center;
+                    }
+                }
+            }
+        }
+        if root.phase == 1 || root.phase == 2: HorizontalLayout {
+            alignment: center;
+            spacing: 8 * Theme.dp;
+            Chip {
+                text: "+1 min";
+                toggled => {
+                    self.on = false;
+                    ClockState.timer-add(60);
+                }
+            }
+
+            Chip {
+                text: "+10 s";
+                toggled => {
+                    self.on = false;
+                    ClockState.timer-add(10);
+                }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        alignment: center;
+        spacing: 12 * Theme.dp;
+        padding-top: 8 * Theme.dp;
+        padding-bottom: 22 * Theme.dp;
+        if root.phase == 0: BigButton {
+            width: 200 * Theme.dp;
+            text: "Start";
+            icon: @image-url("@neoui/icons/sys/play.svg");
+            has-icon: true;
+            clicked => {
+                ClockState.timer-start();
+            }
+        }
+        if root.phase == 1 || root.phase == 2: BigButton {
+            width: 140 * Theme.dp;
+            text: "Reset";
+            fill: Theme.dialog-button;
+            clicked => {
+                ClockState.timer-reset();
+            }
+        }
+        if root.phase == 1: BigButton {
+            width: 140 * Theme.dp;
+            text: "Pause";
+            icon: @image-url("@neoui/icons/sys/pause.svg");
+            has-icon: true;
+            clicked => {
+                ClockState.timer-pause();
+            }
+        }
+        if root.phase == 2: BigButton {
+            width: 140 * Theme.dp;
+            text: "Resume";
+            icon: @image-url("@neoui/icons/sys/play.svg");
+            has-icon: true;
+            clicked => {
+                ClockState.timer-start();
+            }
+        }
+        if root.phase == 3: BigButton {
+            width: 140 * Theme.dp;
+            text: "+1 min";
+            fill: Theme.dialog-button;
+            clicked => {
+                ClockState.timer-add(60);
+            }
+        }
+        if root.phase == 3: BigButton {
+            width: 140 * Theme.dp;
+            text: "Stop";
+            fill: Theme.danger;
+            clicked => {
+                ClockState.timer-stop();
+            }
+        }
+    }
+}
+
+component StopwatchPane inherits VerticalLayout {
+    property <bool> laps: ClockState.laps.length > 0;
+    VerticalLayout {
+        spacing: 6 * Theme.dp;
+        padding-top: (root.laps ? 26 : 80) * Theme.dp;
+        padding-bottom: 18 * Theme.dp;
+        HorizontalLayout {
+            alignment: center;
+            spacing: 6 * Theme.dp;
+            BigClock {
+                hours: ClockState.sw-a;
+                minutes: ClockState.sw-b;
+                digit-h: 72 * Theme.dp;
+            }
+
+            VerticalLayout {
+                alignment: end;
+                Text {
+                    text: ClockState.sw-small;
+                    color: Theme.text-dim;
+                    font-size: 30 * Theme.dp;
+                    font-weight: 300;
+                }
+            }
+        }
+
+        if ClockState.sw-line != "": Text {
+            text: ClockState.sw-line;
+            color: Theme.text-dim;
+            font-size: 14 * Theme.dp;
+            horizontal-alignment: center;
+        }
+    }
+
+    if root.laps: NeoList {
+        vertical-stretch: 1;
+        VerticalLayout {
+            width: root.width;
+            alignment: start;
+            padding-left: 12 * Theme.dp;
+            padding-right: 12 * Theme.dp;
+            Card {
+                VerticalLayout {
+                    for lap[i] in ClockState.laps: lap-row := Rectangle {
+                        height: 48 * Theme.dp;
+                        property <color> tint: lap.mark == 1 ? Theme.ok : lap.mark == 2 ? Theme.danger : Theme.text;
+                        HorizontalLayout {
+                            padding-left: 16 * Theme.dp;
+                            padding-right: 16 * Theme.dp;
+                            spacing: 10 * Theme.dp;
+                            Text {
+                                text: lap.name;
+                                width: 50 * Theme.dp;
+                                color: Theme.text-dim;
+                                font-size: 14 * Theme.dp;
+                                vertical-alignment: center;
+                            }
+
+                            if lap.mark != 0: Text {
+                                text: lap.mark == 1 ? "FASTEST" : "SLOWEST";
+                                color: lap-row.tint;
+                                font-size: 11.5 * Theme.dp;
+                                font-weight: 700;
+                                letter-spacing: 0.4 * Theme.dp;
+                                vertical-alignment: center;
+                            }
+                            Rectangle {
+                                horizontal-stretch: 1;
+                            }
+
+                            Text {
+                                text: lap.lap;
+                                color: lap-row.tint;
+                                font-size: 16 * Theme.dp;
+                                vertical-alignment: center;
+                            }
+
+                            Text {
+                                text: lap.total;
+                                width: 76 * Theme.dp;
+                                color: Theme.text-dim;
+                                font-size: 14 * Theme.dp;
+                                horizontal-alignment: right;
+                                vertical-alignment: center;
+                            }
+                        }
+
+                        if i < ClockState.laps.length - 1: Rectangle {
+                            x: 16 * Theme.dp;
+                            y: parent.height - self.height;
+                            width: parent.width - self.x;
+                            height: max(1px, Theme.dp / 3);
+                            background: #ffffff12;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if !root.laps: Rectangle {
+        vertical-stretch: 1;
+    }
+
+    HorizontalLayout {
+        alignment: center;
+        spacing: 12 * Theme.dp;
+        padding-top: (root.laps ? 14 : 8) * Theme.dp;
+        padding-bottom: (root.laps ? 18 : 22) * Theme.dp;
+        if !ClockState.sw-started: BigButton {
+            width: 200 * Theme.dp;
+            text: "Start";
+            icon: @image-url("@neoui/icons/sys/play.svg");
+            has-icon: true;
+            clicked => {
+                ClockState.sw-toggle();
+            }
+        }
+        if ClockState.sw-running: BigButton {
+            width: 140 * Theme.dp;
+            text: "Lap";
+            fill: Theme.dialog-button;
+            icon: @image-url("@neoui/icons/sys/stopwatch.svg");
+            has-icon: true;
+            clicked => {
+                ClockState.sw-lap();
+            }
+        }
+        if ClockState.sw-running: BigButton {
+            width: 140 * Theme.dp;
+            text: "Stop";
+            fill: Theme.danger;
+            icon: @image-url("@neoui/icons/sys/pause.svg");
+            has-icon: true;
+            clicked => {
+                ClockState.sw-toggle();
+            }
+        }
+        if ClockState.sw-started && !ClockState.sw-running: BigButton {
+            width: 140 * Theme.dp;
+            text: "Reset";
+            fill: Theme.dialog-button;
+            clicked => {
+                ClockState.sw-reset();
+            }
+        }
+        if ClockState.sw-started && !ClockState.sw-running: BigButton {
+            width: 140 * Theme.dp;
+            text: "Resume";
+            icon: @image-url("@neoui/icons/sys/play.svg");
+            has-icon: true;
+            clicked => {
+                ClockState.sw-toggle();
+            }
+        }
+    }
+}
+
+export component TimersPage inherits VerticalLayout {
+    HorizontalLayout {
+        padding-top: 12 * Theme.dp;
+        padding-left: 16 * Theme.dp;
+        padding-right: 16 * Theme.dp;
+        Segmented {
+            items: ["Timer", "Stopwatch"];
+            current: ClockState.timers;
+            picked(i) => {
+                ClockState.timers-chosen(i);
+            }
+        }
+    }
+
+    if ClockState.timers == 0: TimerPane {
+        vertical-stretch: 1;
+    }
+    if ClockState.timers == 1: StopwatchPane {
+        vertical-stretch: 1;
+    }
+}

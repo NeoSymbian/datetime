@@ -1,0 +1,36 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// A segmented switch (Timer | Stopwatch, Digital | Analog): a #1d2025 track r 19, the picked segment on #3a3f48.
+import { Theme } from "@neoui/kit.slint";
+
+export component Segmented inherits Rectangle {
+    in property <[string]> items;
+    in-out property <int> current;
+    callback picked(int);
+    height: 38 * Theme.dp;
+    border-radius: 19 * Theme.dp;
+    background: Theme.pill;
+    accessible-role: tab-list;
+    HorizontalLayout {
+        padding: 3 * Theme.dp;
+        spacing: 2 * Theme.dp;
+        for item[i] in root.items: Rectangle {
+            border-radius: 16 * Theme.dp;
+            background: i == root.current ? #3a3f48 : t.pressed ? Theme.pressed : transparent;
+            accessible-role: tab;
+            accessible-label: item;
+            Text {
+                text: item;
+                color: i == root.current ? Theme.text : Theme.text-secondary;
+                font-size: 14 * Theme.dp;
+                font-weight: 500;
+            }
+
+            t := TouchArea {
+                clicked => {
+                    root.current = i;
+                    root.picked(i);
+                }
+            }
+        }
+    }
+}

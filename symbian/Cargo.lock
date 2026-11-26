@@ -416,6 +416,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "776dfebd015e2d8732c684a2c71003674ccb49457b539b9e82151ba38e96dd7c"
 
 [[package]]
+name = "calendar-core"
+version = "0.1.0"
+dependencies = [
+ "neoui-proto",
+ "pim-ics",
+]
+
+[[package]]
 name = "calloop"
 version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -517,6 +525,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "clock-ui"
+version = "0.1.0"
+dependencies = [
+ "datetime-core",
+ "neoui-kit",
+ "neoui-proto",
+ "slint",
+]
+
+[[package]]
 name = "clru"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -578,6 +596,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.10",
+]
+
+[[package]]
+name = "contacts"
+version = "0.1.0"
+source = "git+https://github.com/NeoSymbian/phone?rev=5f49e5c850c85cd791bac46b16c1c6cff37e9bf3#5f49e5c850c85cd791bac46b16c1c6cff37e9bf3"
+dependencies = [
+ "phone-rules",
 ]
 
 [[package]]
@@ -836,6 +862,7 @@ dependencies = [
 name = "dt-client"
 version = "0.1.0"
 dependencies = [
+ "calendar-core",
  "datetime-core",
  "e32",
 ]
@@ -844,9 +871,12 @@ dependencies = [
 name = "dtsrv"
 version = "0.1.0"
 dependencies = [
+ "calendar-core",
+ "contacts",
  "datetime-core",
  "e32",
  "neoui-proto",
+ "pim-ics",
 ]
 
 [[package]]
@@ -2601,9 +2631,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "neo-format-pim"
+version = "0.1.0"
+source = "git+https://github.com/NeoSymbian/files?rev=de27b50a76d1482adbafd24b5f0d28b894409acf#de27b50a76d1482adbafd24b5f0d28b894409acf"
+
+[[package]]
 name = "neoapp"
 version = "0.1.0"
-source = "git+https://github.com/NeoSymbian/neoui?rev=68a4fb27f45d956a3081e37ea982ed65c30f6453#68a4fb27f45d956a3081e37ea982ed65c30f6453"
+source = "git+https://github.com/NeoSymbian/neoui?rev=4f19d26d74e267d14638eb83a286b656dba29ed6#4f19d26d74e267d14638eb83a286b656dba29ed6"
 dependencies = [
  "e32",
  "neoui-proto",
@@ -2611,13 +2646,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "neoaudio"
+version = "0.1.0"
+source = "git+https://github.com/NeoSymbian/neohw?rev=a11fa906f35bbd1dcec979495210dcdab3dc8651#a11fa906f35bbd1dcec979495210dcdab3dc8651"
+
+[[package]]
 name = "neoclock"
 version = "0.1.0"
 dependencies = [
+ "clock-ui",
  "datetime-core",
+ "dt-client",
  "e32",
  "neoapp",
- "neoui-kit",
+ "neoaudio",
  "neoui-proto",
  "slint",
 ]
@@ -2625,7 +2667,7 @@ dependencies = [
 [[package]]
 name = "neoui-kit"
 version = "0.1.0"
-source = "git+https://github.com/NeoSymbian/neoui?rev=68a4fb27f45d956a3081e37ea982ed65c30f6453#68a4fb27f45d956a3081e37ea982ed65c30f6453"
+source = "git+https://github.com/NeoSymbian/neoui?rev=4f19d26d74e267d14638eb83a286b656dba29ed6#4f19d26d74e267d14638eb83a286b656dba29ed6"
 dependencies = [
  "slint-build",
 ]
@@ -2633,7 +2675,7 @@ dependencies = [
 [[package]]
 name = "neoui-proto"
 version = "0.1.0"
-source = "git+https://github.com/NeoSymbian/neoui?rev=68a4fb27f45d956a3081e37ea982ed65c30f6453#68a4fb27f45d956a3081e37ea982ed65c30f6453"
+source = "git+https://github.com/NeoSymbian/neoui?rev=4f19d26d74e267d14638eb83a286b656dba29ed6#4f19d26d74e267d14638eb83a286b656dba29ed6"
 
 [[package]]
 name = "nix"
@@ -3165,10 +3207,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
+name = "phone-rules"
+version = "0.1.0"
+source = "git+https://github.com/NeoSymbian/neohw?rev=9b3853bdc56c0bef6bcf34cbc5cf0c1f18e39fb5#9b3853bdc56c0bef6bcf34cbc5cf0c1f18e39fb5"
+
+[[package]]
 name = "pico-args"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5be167a7af36ee22fe3115051bc51f6e6c7054c9348e28deb4f49bd6f705a315"
+
+[[package]]
+name = "pim-ics"
+version = "0.1.0"
+dependencies = [
+ "neo-format-pim",
+ "neoui-proto",
+]
 
 [[package]]
 name = "pin-project"

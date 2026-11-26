@@ -1,0 +1,174 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Everything Clock's screens show and every action they report, in one global: NEOCLOCK (symbian/clock) fills the
+// properties from DTSRV and its own state and handles the callbacks; the screens only draw and forward. The host
+// snapshot tests set the same properties.
+import { InfoChip } from "@dt-shared/time-hero.slint";
+
+export { InfoChip }
+
+// a city on the Clock tab's World card
+export struct CityCard { name: string, when: string, time: string, night: bool }
+// an alarm card: the digits as shown (12- or 24-hour), the days it repeats on, or `once` ("Tomorrow") for none
+export struct AlarmItem {
+    id: int,
+    hours: int,
+    minutes: int,
+    am-pm: string,
+    label: string,
+    days: [bool],
+    once: string,
+    on: bool,
+}
+// a row of Add city: `index` into the catalogue; `section` starts a group ("A – M") above the row
+export struct CatalogueItem { index: int, name: string, detail: string, time: string, added: bool, section: string }
+// a stopwatch lap; mark 1 = fastest, 2 = slowest
+export struct LapItem { name: string, lap: string, total: string, mark: int }
+
+export global ClockState {
+    // Navigation: the footer tab (0 Clock, 1 Alarms, 2 Timers), the Timers tab's switch (0 Timer, 1 Stopwatch) and
+    // the view over the tabs ("" none, "alarm", "sound", "cities", "set-time", "settings", "ringing").
+    in-out property <int> tab;
+    in-out property <int> timers;
+    in property <string> view;
+    in property <bool> h24: true;
+    callback tab-chosen(int);
+    callback timers-chosen(int);
+    // ← or ✕: leave the view
+    callback close();
+    // the header's + (Add city, Add alarm) and ⋮ (0 Set time, 1 Settings)
+    callback add();
+    callback menu(int);
+
+    // Clock tab: the hero and the World card
+    in property <int> hours;
+    in property <int> minutes;
+    in property <string> seconds;
+    in property <string> am-pm;
+    in property <string> date;
+    in property <[InfoChip]> chips;
+    in property <bool> analog;
+    in property <image> face;
+    in property <string> world-title;
+    in property <string> here;
+    in property <[CityCard]> cities;
+    in property <bool> cities-full;
+    // a long-press on a city: remove it?
+    callback city-held(int);
+
+    // Alarms tab: the next alarm ("" caption = none on) and the cards
+    in property <string> next-caption;
+    in property <int> next-hours;
+    in property <int> next-minutes;
+    in property <string> next-am-pm;
+    in property <string> next-line;
+    in property <[AlarmItem]> alarms;
+    in property <bool> alarms-full;
+    callback edit-alarm(int);
+    callback alarm-switched(int, bool);
+
+    // The alarm editor (view "alarm"), its time sheet and the snooze sheet
+    in property <bool> edit-new;
+    in property <int> edit-hours;
+    in property <int> edit-minutes;
+    in property <string> edit-am-pm;
+    in property <string> edit-when;
+    in property <[bool]> edit-days;
+    // 0 Once, 1 Weekdays, 2 Every day, -1 another set of days
+    in property <int> edit-preset;
+    in-out property <string> edit-label;
+    in-out property <bool> time-sheet;
+    in-out property <int> sheet-hour;
+    in-out property <int> sheet-minute;
+    callback edit-time(int, int);
+    callback edit-day(int);
+    callback edit-preset-picked(int);
+    callback save-alarm();
+    callback delete-alarm();
+    callback open-sound();
+    in property <string> sound-name;
+    in property <string> snooze-text;
+    in-out property <bool> snooze-sheet;
+    in property <[string]> snooze-choices;
+    in property <int> snooze-current;
+    callback snooze-picked(int);
+
+    // Alarm sound (view "sound")
+    in property <[string]> sounds;
+    in property <[string]> sound-notes;
+    in property <int> sound-current;
+    callback sound-picked(int);
+
+    // Settings (view "settings")
+    in property <bool> show-seconds: true;
+    in property <bool> show-date: true;
+    in property <bool> shade-next: true;
+    callback set-face(int);
+    callback set-seconds(bool);
+    callback set-show-date(bool);
+    callback set-h24(bool);
+    callback set-shade-next(bool);
+
+    // Add city (view "cities")
+    in-out property <string> city-query;
+    in property <[CatalogueItem]> catalogue;
+    callback city-searched(string);
+    callback pick-city(int);
+
+    // Set time (view "set-time") and its date and time sheets
+    in property <bool> auto-on;
+    in property <string> auto-text;
+    in property <string> date-text;
+    in property <string> time-text;
+    in property <string> zone-text;
+    in-out property <bool> date-sheet;
+    in-out property <bool> clock-sheet;
+    in-out property <int> st-year: 2026;
+    in-out property <int> st-month: 1;
+    in-out property <int> st-day: 1;
+    in-out property <int> st-hour;
+    in-out property <int> st-minute;
+    callback set-date(int, int, int);
+    callback set-clock(int, int);
+    callback next-zone();
+    callback save-time();
+
+    // Timer: phase 0 idle, 1 running, 2 paused, 3 done; the digits as two numbers (min:sec, or h:min past an hour)
+    in property <int> timer-phase;
+    in property <int> timer-a;
+    in property <int> timer-b;
+    in property <string> timer-line;
+    in property <image> timer-ring;
+    in property <[string]> presets;
+    in property <int> preset-current: -1;
+    callback timer-step(int);
+    callback timer-preset(int);
+    callback timer-start();
+    callback timer-pause();
+    callback timer-reset();
+    callback timer-add(int);
+    callback timer-stop();
+
+    // Stopwatch: min:sec (h:min past an hour) and ".37"
+    in property <int> sw-a;
+    in property <int> sw-b;
+    in property <string> sw-small: ".00";
+    in property <string> sw-line;
+    in property <bool> sw-running;
+    in property <bool> sw-started;
+    in property <[LapItem]> laps;
+    callback sw-toggle();
+    callback sw-lap();
+    callback sw-reset();
+
+    // Ringing (view "ringing"): an alarm (Snooze / Dismiss) or the timer (+1 min / Stop)
+    in property <bool> ring-timer;
+    in property <string> ring-caption;
+    in property <int> ring-hours;
+    in property <int> ring-minutes;
+    in property <bool> ring-lead-zero: true;
+    in property <string> ring-title;
+    in property <string> ring-line;
+    in property <string> ring-first;
+    callback ring-first-clicked();
+    callback ring-second-clicked();
+}

@@ -8,7 +8,9 @@ canvas's Clock and Calendar v2 boards (`clk2-*`, `cal2-*`, `dt2-*`); the plan is
 | Path | What | Licence |
 |---|---|---|
 | `crates/datetime-core` | The model: alarms, the timer, the stopwatch, the analog face (moved from neoui-proto in DT0) | Apache-2.0 |
-| `symbian/clock` | `NEOCLOCK.EXE` 0xE0008001 | GPL-3.0 (links Slint) |
+| `crates/clock-ui` | Clock v2's screens (Slint) and their host snapshots `snapshots/clk2-*.png`, `dt2-ring-*.png` | GPL-3.0 (links Slint) |
+| `ui-shared` | `@dt-shared`: TimeHero, TimeCard, ProgressRing, Ringing, the segmented switch (Clock and Calendar) | GPL-3.0 |
+| `symbian/clock` | `NEOCLOCK.EXE` 0xE0008001: Clock · Alarms · Timers; the alarms and the timer through DTSRV | GPL-3.0 (links Slint) |
 
 ## Build
 

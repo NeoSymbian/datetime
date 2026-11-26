@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# GPL-3.0 because it links Slint under GPL-3.0 (NeoSymbian decision 2026-11-06), like neoui's apps.
+[package]
+name = "clock-ui"
+description = "Clock v2's screens in Slint (no_std): the tabs, the views, Ringing, and the ring and text they show"
+version.workspace = true
+edition.workspace = true
+license = "GPL-3.0-only"
+
+[dependencies]
+slint = { workspace = true }
+datetime-core = { workspace = true }
+neoui-proto = { workspace = true }
+
+[build-dependencies]
+# the neoui kit (@neoui/kit.slint): theme, fonts, glyphs and components
+neoui-kit = { workspace = true }
+
+[dev-dependencies]
+png = { workspace = true }

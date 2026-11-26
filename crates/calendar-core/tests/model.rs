@@ -673,3 +673,135 @@ fn fixed_offsets_are_zones() {
     // 09:00 CET = 12:00 in Yerevan
     assert_eq!(hours(&of(&q, "spring-standup@example.com")), [12]);
 }
+
+// --- review fixes
+
+fn one_event(lines: &str) -> Store {
+    Store::load(
+        &format!(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:x\r\n{lines}END:VEVENT\r\nEND:VCALENDAR\r\n"
+        ),
+        "",
+    )
+}
+
+#[test]
+fn editing_one_anniversary_keeps_the_copy_single() {
+    let mut s = Store::load("", "");
+    let z = berlin();
+    let uid = s
+        .put(
+            &EventDraft {
+                kind: Kind::Anniversary,
+                title: "Met Ani".into(),
+                start: day(2019, 6, 3) * DAY,
+                end: day(2019, 6, 4) * DAY,
+                ..EventDraft::default()
+            },
+            &z,
+            0,
+        )
+        .expect("put");
+    let mut d = s.get(&uid, Some(day(2026, 6, 3) * DAY), &z).expect("get");
+    d.title = "Met Ani: 7 years".into();
+    s.put(&d, &z, 0).expect("put one");
+    let q = s.query(day(2026, 6, 1), day(2027, 6, 30), 0, &z, &[]);
+    let titles: Vec<&str> = of(&q, &uid).iter().map(|i| i.title.as_str()).collect();
+    assert_eq!(titles, ["Met Ani: 7 years", "Met Ani"]);
+}
+
+#[test]
+fn a_moved_occurrence_keeps_its_own_reminder() {
+    let mut s = Store::load("", "");
+    let z = berlin();
+    let uid = s
+        .put(
+            &EventDraft {
+                title: "Stand-up".into(),
+                start: at(2026, 11, 16, 10, 0),
+                end: at(2026, 11, 16, 10, 15),
+                repeat: Repeat::Every {
+                    freq: Freq::Weekly,
+                    interval: 1,
+                    days: 0b11,
+                    count: 0,
+                    until: None,
+                },
+                reminder: Some(10),
+                ..EventDraft::default()
+            },
+            &z,
+            0,
+        )
+        .expect("put");
+    // Monday's occurrence onto Tuesday's, at the same time
+    let mut d = s.get(&uid, Some(at(2026, 11, 16, 10, 0)), &z).expect("get");
+    d.start += DAY;
+    d.end += DAY;
+    s.put(&d, &z, 0).expect("move");
+    let (from, to) = (at(2026, 11, 16, 0, 0), at(2026, 11, 18, 0, 0));
+    let r = s.reminders(from, to, &z);
+    assert_eq!(r.len(), 2);
+    assert_ne!(r[0].1, r[1].1);
+    // both ring for Tuesday 10:00 CET = 09:00Z
+    for (_, id) in &r {
+        assert_eq!(
+            s.reminder(*id),
+            Some((uid.as_str(), at(2026, 11, 17, 9, 0)))
+        );
+    }
+    assert_eq!(s.reminders(from, to, &z), r);
+}
+
+#[test]
+fn nonexistent_times_are_not_counted() {
+    let s = one_event("DTSTART;TZID=Europe/Berlin:20260328T023000\r\nRRULE:FREQ=DAILY;COUNT=2\r\n");
+    let q = s.query(day(2026, 3, 27), day(2026, 4, 2), 0, &berlin(), &[]);
+    // 02:30 doesn't exist on 29 March (RFC 5545 3.3.10)
+    assert_eq!(days(&of(&q, "x")), [day(2026, 3, 28), day(2026, 3, 30)]);
+}
+
+#[test]
+fn ambiguous_times_are_the_first_instant() {
+    // 02:30 on 25 October is first 02:30 CEST = 00:30Z
+    let s = one_event(
+        "DTSTART;TZID=Europe/Berlin:20261024T023000\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEXDATE:20261025T003000Z\r\n",
+    );
+    let q = s.query(day(2026, 10, 23), day(2026, 10, 28), 0, &berlin(), &[]);
+    assert_eq!(days(&of(&q, "x")), [day(2026, 10, 24), day(2026, 10, 26)]);
+}
+
+#[test]
+fn zoned_end_is_elapsed_time_across_a_change() {
+    let s = one_event(
+        "DTSTART;TZID=Europe/Berlin:20260329T013000\r\nDTEND;TZID=Europe/Berlin:20260329T033000\r\n",
+    );
+    let z = berlin();
+    let q = s.query(day(2026, 3, 29), day(2026, 3, 29), 0, &z, &[]);
+    assert_eq!(
+        (q[0].start, q[0].end),
+        (at(2026, 3, 29, 1, 30), at(2026, 3, 29, 3, 30))
+    );
+    assert_eq!(
+        s.get("x", None, &z).expect("get").end,
+        at(2026, 3, 29, 3, 30)
+    );
+}
+
+#[test]
+fn rules_with_by_filters_they_dont_repeat_are_outside_the_subset() {
+    let s = one_event("DTSTART:20260101T090000\r\nRRULE:FREQ=DAILY;BYMONTHDAY=1;COUNT=2\r\n");
+    let z = berlin();
+    let q = s.query(day(2026, 1, 1), day(2026, 2, 28), 0, &z, &[]);
+    assert_eq!(days(&of(&q, "x")), [day(2026, 1, 1)]);
+    assert_eq!(s.get("x", None, &z).expect("get").repeat, Repeat::Other);
+}
+
+#[test]
+fn next_event_finds_a_leap_day_years_away() {
+    let s = one_event("DTSTART;VALUE=DATE:20240229\r\nRRULE:FREQ=YEARLY\r\n");
+    let n = s
+        .next_event(at(2024, 3, 1, 12, 0), &berlin())
+        .expect("next");
+    assert_eq!(n.start, day(2028, 2, 29) * DAY);
+}
