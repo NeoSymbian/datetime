@@ -591,6 +591,7 @@ dependencies = [
 [[package]]
 name = "contacts"
 version = "0.1.0"
+source = "git+https://github.com/NeoSymbian/phone?rev=5f49e5c850c85cd791bac46b16c1c6cff37e9bf3#5f49e5c850c85cd791bac46b16c1c6cff37e9bf3"
 dependencies = [
  "phone-rules",
 ]
