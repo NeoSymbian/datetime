@@ -25,7 +25,7 @@ source = "git+https://github.com/NeoSymbian/files?rev=de27b50a76d1482adbafd24b5f
 [[package]]
 name = "neoui-proto"
 version = "0.1.0"
-source = "git+https://github.com/NeoSymbian/neoui?rev=68a4fb27f45d956a3081e37ea982ed65c30f6453#68a4fb27f45d956a3081e37ea982ed65c30f6453"
+source = "git+https://github.com/NeoSymbian/neoui?rev=4f19d26d74e267d14638eb83a286b656dba29ed6#4f19d26d74e267d14638eb83a286b656dba29ed6"
 
 [[package]]
 name = "pim-ics"

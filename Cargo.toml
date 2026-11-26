@@ -17,8 +17,8 @@ calendar-core = { path = "crates/calendar-core" }
 # NeoSymbian/files: the iCalendar/vCard parser and editor (FA7)
 neo-format-pim = { git = "https://github.com/NeoSymbian/files", rev = "de27b50a76d1482adbafd24b5f0d28b894409acf" }
 # NeoSymbian/neoui: the wire types (time zones, world cities, the face text, the settings registry) and the kit
-neoui-proto = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3081e37ea982ed65c30f6453" }
-neoui-kit = { git = "https://github.com/NeoSymbian/neoui", rev = "68a4fb27f45d956a3081e37ea982ed65c30f6453" }
+neoui-proto = { git = "https://github.com/NeoSymbian/neoui", rev = "4f19d26d74e267d14638eb83a286b656dba29ed6" }
+neoui-kit = { git = "https://github.com/NeoSymbian/neoui", rev = "4f19d26d74e267d14638eb83a286b656dba29ed6" }
 # the same Slint as neoui (one copy in the ROM, no_std)
 slint = { version = "=1.18.1", default-features = false, features = ["compat-1-2", "unsafe-single-threaded", "libm", "renderer-software"] }
 png = "=0.18.1"
