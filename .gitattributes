@@ -1,0 +1,2 @@
+# iCalendar fixtures keep their CRLF line ends (the round-trip tests are byte-exact)
+*.ics -text
