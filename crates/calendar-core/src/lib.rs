@@ -183,7 +183,10 @@ impl Item {
         let wall = start.seconds();
         let dur = match ics.end(comp) {
             Some(e) if all_day => (e.date.days() - start.date.days()) * DAY,
-            Some(e) if e.utc == start.utc && e.tzid == start.tzid => e.seconds() - wall,
+            // floating (or both UTC): wall clock; zoned endpoints go through UTC, so a change between them counts
+            Some(e) if e.utc == start.utc && e.tzid.is_none() && start.tzid.is_none() => {
+                e.seconds() - wall
+            }
             Some(e) => ics.tz(&e).utc(e.seconds(), &0) - tz.utc(wall, &0),
             None => 0,
         };

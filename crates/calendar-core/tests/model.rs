@@ -770,3 +770,20 @@ fn ambiguous_times_are_the_first_instant() {
     let q = s.query(day(2026, 10, 23), day(2026, 10, 28), 0, &berlin(), &[]);
     assert_eq!(days(&of(&q, "x")), [day(2026, 10, 24), day(2026, 10, 26)]);
 }
+
+#[test]
+fn zoned_end_is_elapsed_time_across_a_change() {
+    let s = one_event(
+        "DTSTART;TZID=Europe/Berlin:20260329T013000\r\nDTEND;TZID=Europe/Berlin:20260329T033000\r\n",
+    );
+    let z = berlin();
+    let q = s.query(day(2026, 3, 29), day(2026, 3, 29), 0, &z, &[]);
+    assert_eq!(
+        (q[0].start, q[0].end),
+        (at(2026, 3, 29, 1, 30), at(2026, 3, 29, 3, 30))
+    );
+    assert_eq!(
+        s.get("x", None, &z).expect("get").end,
+        at(2026, 3, 29, 3, 30)
+    );
+}
