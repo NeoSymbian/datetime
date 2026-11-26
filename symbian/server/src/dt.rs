@@ -499,7 +499,23 @@ impl Dt {
         self.rung.ringing.retain(|&x| x != r);
         self.remove_card(r);
         self.changed(mask::RINGS);
+        self.reopen_rest();
         self.save_rung()
+    }
+
+    /// Another ring still on (an alarm under a reminder that came a minute later): its Ringing page comes back, so
+    /// ending one ring doesn't leave the other ringing behind Home. Runs inside the app's RING_ACTION, before its DONE.
+    fn reopen_rest(&self) {
+        let Some(&r) = self.rung.ringing.last() else {
+            return;
+        };
+        match ring::kind(r) {
+            ring::REMINDER if self.settings.ring_reminders => {
+                self.open("calendar", pages::calendar::RING, &r.to_string())
+            }
+            ring::REMINDER => {}
+            _ => self.open("clock", pages::clock::RING, &r.to_string()),
+        }
     }
 
     /// A tap on one of DTSRV's cards (action 0) or on its button `action - 1`.
