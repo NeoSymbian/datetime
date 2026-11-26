@@ -517,6 +517,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "clock-ui"
+version = "0.1.0"
+dependencies = [
+ "datetime-core",
+ "neoui-kit",
+ "neoui-proto",
+ "slint",
+]
+
+[[package]]
 name = "clru"
 version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2611,13 +2621,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "neoaudio"
+version = "0.1.0"
+source = "git+https://github.com/NeoSymbian/neohw?rev=a11fa906f35bbd1dcec979495210dcdab3dc8651#a11fa906f35bbd1dcec979495210dcdab3dc8651"
+
+[[package]]
 name = "neoclock"
 version = "0.1.0"
 dependencies = [
+ "clock-ui",
  "datetime-core",
+ "dt-client",
  "e32",
  "neoapp",
- "neoui-kit",
+ "neoaudio",
  "neoui-proto",
  "slint",
 ]

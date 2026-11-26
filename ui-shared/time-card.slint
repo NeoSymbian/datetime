@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // TimeCard (dt2-spec-components): a kit Card holding digits, a label line and a trailing control. Two uses here:
 // AlarmCard (92 dp: 38 dp digits, the day letters, a Switch; clk2-alarms) and CityRow (64 dp rows of the World card:
-// a day/night dot, the city, "Today · −4 h", the time in 28 light; clk2-clock).
+// a day/night dot, the city, "Today · −4 h", the time in 28 light; clk2-clock). A long-press on a city reports it.
 import { Theme, BigClock, Card, Switch } from "@neoui/kit.slint";
 
 export component TimeCard inherits Card {
@@ -122,12 +122,25 @@ export component CityRow inherits Rectangle {
     in property <string> time;
     in property <bool> night;
     in property <bool> last;
-    callback clicked();
+    // held 500 ms (the app asks to remove the city)
+    callback long-pressed();
     height: 64 * Theme.dp;
     background: touch.pressed ? Theme.pressed : transparent;
+    property <bool> fired;
     touch := TouchArea {
-        clicked => {
-            root.clicked();
+        changed pressed => {
+            if self.pressed {
+                root.fired = false;
+            }
+        }
+    }
+
+    Timer {
+        interval: 500ms;
+        running: touch.pressed && !root.fired;
+        triggered => {
+            root.fired = true;
+            root.long-pressed();
         }
     }
 

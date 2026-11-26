@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// The Clock tab (clk2-clock, -analog, -12h): the TimeHero, then the World card (World was merged in, DT02). A tap on
-// a city asks to remove it; + in the header adds one.
+// The Clock tab (clk2-clock, -analog, -12h): the TimeHero, then the World card (World was merged in, DT02). A
+// long-press on a city asks to remove it; + in the header adds one.
 import { Theme, NeoList } from "@neoui/kit.slint";
 import { TimeHero } from "@dt-shared/time-hero.slint";
 import { TimeCard, CityRow } from "@dt-shared/time-card.slint";
@@ -55,8 +55,8 @@ export component ClockPage inherits Rectangle {
                             time: c.time;
                             night: c.night;
                             last: i == ClockState.cities.length - 1;
-                            clicked => {
-                                ClockState.city-tapped(i);
+                            long-pressed => {
+                                ClockState.city-held(i);
                             }
                         }
                     }

@@ -52,7 +52,8 @@ export global ClockState {
     in property <string> here;
     in property <[CityCard]> cities;
     in property <bool> cities-full;
-    callback city-tapped(int);
+    // a long-press on a city: remove it?
+    callback city-held(int);
 
     // Alarms tab: the next alarm ("" caption = none on) and the cards
     in property <string> next-caption;
